@@ -1,5 +1,6 @@
-#include <iostream>
+п»ї#include <iostream>
 #include <iomanip>
+#include <cmath>
 
 
 #include <stdio.h>
@@ -58,20 +59,34 @@ struct Circle
         };
 };
 
+double angle( double О”x, double О”y )
+{
+        constexpr double ПЂ = 3.14159265358979323846;
+
+        if( О”x > +0. ) return atan( О”y / О”x );
+        if( О”x < -0. ) return atan( О”y / О”x ) + ПЂ;
+
+        if( О”y > +0. ) return ПЂ / 2.;
+        if( О”y < -0. ) return 3./2. * ПЂ;
+
+        return NAN;
+}
+
 struct Arc: public Circle
 {
         Point p1;
         Point p2;
         Sing direction;
 
-        Arc( double r_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_)
+        Arc( double r_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_ = plus )
                 : Circle( r_, p1_, p2_, case_)
                 , p1( p1_), p2( p2_), direction( direction_)
         {};
 
         Arc& operator *= ( double scale)
         {
-                *((Circle *)this) *= scale;
+                //*((Circle *)this) *= scale;
+                *static_cast< Circle *>(this) *= scale;
                 p1.x = (p1.x - center.x) * scale + center.x;
                 p1.y = (p1.y - center.y) * scale + center.y;
                 p2.x = (p2.x - center.x) * scale + center.x;
@@ -81,22 +96,23 @@ struct Arc: public Circle
 
 friend  std::ostream& operator<<( std::ostream &os, const Arc& arc )
         {
-                const int c = 40;
-                double  x =  arc.p1.x;
-                double dx = (arc.p2.x - x) / c;
+                constexpr int n = 20;
+ 
+                double a1 = angle( arc.p1.x - arc.center.x, arc.p1.y - arc.center.y );
+                double a2 = angle( arc.p2.x - arc.center.x, arc.p2.y - arc.center.y );
                 if( arc.direction == minus)
-                {
-                        x = arc.p2.x;
-                        dx = -dx;
-                }
-                double r2 = square( arc.r);
+                        std::swap( a1, a2 );
+
+                double О”a = (a2 - a1) / n;
                 os << std::setprecision(5) << std::fixed;
-                for( int i = 0; i <= c; i++)
+                for( int i = 0; i <= n; i++)
                 {
-                        double y = arc.center.y + sqrt( r2 - square( x - arc.center.x) );
-                        os << std::setw(8) << m(x) << std::setw(12) << m(y) << '\n';
-                        x += dx;
+                        double x = arc.center.x + arc.r * cos(a1);
+                        double y = arc.center.y + arc.r * sin(a1);
+                        os << std::setw(8) << x << std::setw(12) << y << '\n';
+                        a1 += О”a;
                 }
+
                 return os;
         };
 };
@@ -106,62 +122,22 @@ int main( int argc, const char *argv[])
     //uint maxnum = argc < 2 ? 250000
     //                       : atoi( argv[1]);
 
-    double b_abs =  70.0; // хорда профиля
-    double D_abs = 160.0; // диаметр трубы
-    double s_abs =   4.7; // толщина стенки трубы
+    double b_abs =  70.0; // С…РѕСЂРґР° РїСЂРѕС„РёР»СЏ
+    double D_abs = 160.0; // РґРёР°РјРµС‚СЂ С‚СЂСѓР±С‹
+    double s_abs =   4.7; // С‚РѕР»С‰РёРЅР° СЃС‚РµРЅРєРё С‚СЂСѓР±С‹
 
     std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n';
 
-    double D = D_abs / b_abs; // относительный диаметр трубы
-    double s = s_abs / b_abs; // относительная толщина стенки трубы
+    double D = D_abs / b_abs; // РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅС‹Р№ РґРёР°РјРµС‚СЂ С‚СЂСѓР±С‹
+    double s = s_abs / b_abs; // РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅР°СЏ С‚РѕР»С‰РёРЅР° СЃС‚РµРЅРєРё С‚СЂСѓР±С‹
 
-    Arc a( D/2., Point( 1., 0.), Point( 0., 0.), minus, plus );
+    Arc a( D/2., Point( 1., 0.), Point( 0., 0.), minus );
     Arc b = a;
     b *= (1. - s_abs*2./D_abs);
     b.direction = minus;
     std::cout << a << b;
 
     std::cout << " 1.00000     0.00000\n";
-
-    return 0;
-}
-
-int main1( int argc, const char *argv[])
-{
-    //uint maxnum = argc < 2 ? 250000
-    //                       : atoi( argv[1]);
-
-    double b_abs =  70.0; // хорда профиля
-    double D_abs = 160.0; // диаметр трубы
-    double s_abs =   4.7; // толщина стенки трубы
-
-    printf("PIPE %.0fx%.1f-%.0f\n", D_abs, s_abs, b_abs);
-
-    double D = D_abs / b_abs; // относительный диаметр трубы
-    double s = s_abs / b_abs; // относительная толщина стенки трубы
-
-    // расчет координат центра
-    double R2 = D*D/4.0; // квадрат радиуса трубы
-    double x0 = 0.5;
-    double y0 = - sqrt( R2 - x0*x0);
-
-    for( double x = 1.0; x >= -DBL_MATb_EGO_MIN; x -= 0.02)
-    {
-        double y = y0 + sqrt( R2 - (x-x0)*(x-x0) );
-        printf("% .5f    % .5f\n", x, y );
-    }
-
-    double k = 1. - s_abs*2/D_abs;
-    //printf("%f\n", k);
-
-    R2 = R2*k*k; // квадрат внутреннего радиуса трубы
-    for( double x = 0.5*(1-k); x <= 0.5*(1+k); x += 0.02*k)
-    {
-        double y = y0 + sqrt( R2 - (x-x0)*(x-x0) );
-        printf("% .5f    % .5f\n", x, y);
-    }
-
-    printf("% .5f    % .5f\n", 1.0, 0.0);
 
     return 0;
 }
