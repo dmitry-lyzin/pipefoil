@@ -1,6 +1,31 @@
 ﻿#include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <limits>   
+
+namespace conexpr
+{
+        double constexpr sqrt_Newton_Raphson(double x, double curr, double prev)
+        {
+                return curr == prev
+                        ? curr
+                        : sqrt_Newton_Raphson(x, 0.5 * (curr + x / curr), curr);
+        }
+
+        /*
+        * Constexpr version of the square root
+        * Return value:
+        *   - For a finite and non-negative value of "x", returns an approximation for the square root of "x"
+        *   - Otherwise, returns NaN
+        */
+        double constexpr sqrt( double x)
+        {
+                return x >= 0 && x < std::numeric_limits<double>::infinity()
+                        ? sqrt_Newton_Raphson(x, x, 0)
+                        : std::numeric_limits<double>::quiet_NaN();
+        }
+}
+
 
 //#define DBL_MATb_EGO_MIN DBL_MIN
 #define DBL_MATb_EGO_MIN 0.0000001
@@ -15,7 +40,7 @@ double m( double x)
 
 enum Sing { minus = -1, plus = 1 };
 
-double ²( double a)
+constexpr double ²( double a)
 {
         return a * a;
 }
@@ -25,9 +50,10 @@ struct Point
         double x, y;
 constex Point(                     ): x(0.), y(0.) {};
 constex Point( double x_, double y_): x(x_), y(y_) {};
+constex 
 friend  double distance( const Point& p1, const Point& p2)
         {
-                return sqrt( ²( p2.x - p1.x) + ²( p2.y - p1.y));
+                return conexpr::sqrt( ²( p2.x - p1.x) + ²( p2.y - p1.y));
         }
 };
 
@@ -36,18 +62,22 @@ struct Circle
         Point O;
         double R;
 
-        Circle( double R_, const Point& p1, const Point& p2, Sing case_)
-        : R( R_)
+constex Point circle_center( double R, const Point& p1, const Point& p2, Sing case_)
         {
                 double d = case_ * distance( p1, p2);
                 //double h = sqrt( ²(R) - ²(d/2.));
-                double h_div_d = sqrt( ²(R) - ²(d/2.)) / d;
+                double h_div_d = conexpr::sqrt( ²(R) - ²(d/2.)) / d;
 
-                O.x = (p1.x + p2.x)/2. + (p2.y - p1.y) * h_div_d;
-                O.y = (p1.y + p2.y)/2. - (p2.x - p1.x) * h_div_d;
+                return Point( (p1.x + p2.x)/2. + (p2.y - p1.y) * h_div_d
+                            , (p1.y + p2.y)/2. - (p2.x - p1.x) * h_div_d
+                            );                      
         };
 
-        Circle& operator *= ( double scale)
+constex Circle( double R_, const Point& p1, const Point& p2, Sing case_)
+        : R( R_), O( circle_center( R_, p1, p2, case_))
+        {};
+
+constex Circle& operator *= ( double scale)
         {
                 R *= scale;
                 return *this;
@@ -56,7 +86,7 @@ struct Circle
 
 
 // поиск точки касания прямой исходящей из точки src_p и окружности circle
-Point tangent_point( const Circle& circle, const Point& src_p, Sing sing = plus )
+constexpr Point tangent_point( const Circle& circle, const Point& src_p, Sing sing = plus )
 {
 /*
 https://www.cyberforum.ru/geometry/thread605358.html?ysclid=l77andw88d999612641 
@@ -99,7 +129,7 @@ Y = kX-n
         double C = R² - ²(b-y);
         double D = ²(B) - 4.*A*C;
 
-        double k = (-B + sing*sqrt(D))/(2.*A);
+        double k = (-B + sing * conexpr::sqrt(D))/(2.*A);
 
         // X, Y - точка касания
         double n = y - k*x;
@@ -116,10 +146,10 @@ struct Line
         Sing direction;
 
 constex Line( const Point& p1_, const Point& p2_, Sing direction_ = plus )
-                : p1( p1_), p2( p2_), direction( direction_)
+        : p1( p1_), p2( p2_), direction( direction_)
         {};
-        Line( const Circle& tangent_circle, const Point& p1_, Sing case_, Sing direction_ = plus )
-                : p1( p1_), p2( tangent_point( tangent_circle, p1_, case_ )), direction( direction_)
+constex Line( const Circle& tangent_circle, const Point& p1_, Sing case_, Sing direction_ = plus )
+        : p1( p1_), p2( tangent_point( tangent_circle, p1_, case_ )), direction( direction_)
         {};
 };
 
@@ -142,12 +172,12 @@ struct Arc: public Circle
         Point p2;
         Sing direction;
 
-        Arc( const Circle& circle_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_ = plus )
+constex Arc( const Circle& circle_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_ = plus )
                 : Circle( circle_)
                 , p1( p1_), p2( p2_), direction( direction_)
         {};
 
-        Arc( double r_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_ = plus )
+constex Arc( double r_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_ = plus )
                 : Circle( r_, p1_, p2_, case_)
                 , p1( p1_), p2( p2_), direction( direction_)
         {};
