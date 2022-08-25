@@ -73,8 +73,8 @@ constexpr Circle& operator *= ( double scale)
 };
 
 
-// поиск точки касания прямой исходящей из точки src_p и окружности circle
-constexpr Point tangent_point( const Circle& circle, const Point& src_p, Sing sing = plus )
+// поиск точки касания прямой исходящей из точки p и окружности c
+constexpr Point tangent_point( const Circle& c, const Point& p, Sing sing = plus )
 {
 /*
 https://www.cyberforum.ru/geometry/thread605358.html?ysclid=l77andw88d999612641 
@@ -86,6 +86,7 @@ y и x- координаты ИСХОДНОЙ точки
 (2ax-a²+R²-x²)k²+(2ab-2ay+2yx-2xb)k+(R²-b²-y²+2by) = 0
 (2ax-a²+R²-x²)k²+2(ab-ay+yx-xb)k+(R²-b²-y²+2by) = 0
 
+// решаем квадратное уравнение
 A = (2ax-a²+R²-x²)
 B = 2(ab-ay+yx-xb)
 C = (R²-b²-y²+2by)
@@ -99,29 +100,21 @@ X, Y - точка касания
 X = (a+k(b-n))/(1+k²)
 Y = kX-n
 */
-
-        // центр окр.
-        double a = circle.x;
-        double b = circle.y;
-        double R²= ²(circle.R);
-        //y и x - координаты ИСХОДНОЙ точки
-        double x = src_p.x;
-        double y = src_p.y;
-
-        // (2ax-a²+R²-x²)k²+(2ab-2ay+2yx-2xb)k+(R²-b²-y²+2by) = 0
-        // (2ax-a²+R²-x²)k²+2(ab-ay+yx-xb)k+(R²-b²-y²+2by) = 0
+        double Δx = c.x - p.x;
+        double Δy = c.y - p.y;
+        double R² = ²(c.R);
 
         // решаем квадратное уравнение
-        double A = R² - ²(a-x);
-        double B = 2.*(a*b-a*y+y*x-x*b);
-        double C = R² - ²(b-y);
+        double A = R² - ²(Δx);
+        double B = 2.*Δx*Δy;
+        double C = R² - ²(Δy);
         double D = ²(B) - 4.*A*C;
 
         double k = (-B + sing * conexpr::sqrt(D))/(2.*A);
 
         // X, Y - точка касания
-        double n = y - k*x;
-        double X = (a+k*(b-n))/(1.+²(k));
+        double n = p.y - k*p.x;
+        double X = (c.x + k*(c.y - n)) / (1.+²(k));
         double Y = k*X + n;
 
         return Point( X, Y );
