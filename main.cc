@@ -31,13 +31,6 @@ namespace conexpr
 #define DBL_MATb_EGO_MIN 0.0000001
 #define constex constexpr
 
-double m( double x)
-{
-        return (fabs(x) < DBL_MATb_EGO_MIN) ? +0.0
-                                            : x
-                                            ;
-}
-
 enum Sing { minus = -1, plus = 1 };
 
 constexpr double ²( double a)
@@ -57,12 +50,12 @@ friend  double distance( const Point& p1, const Point& p2)
         }
 };
 
-struct Circle
+struct Circle: public Point
 {
-        Point O;
         double R;
 
-constex Point circle_center( double R, const Point& p1, const Point& p2, Sing case_)
+constex static
+        Point circle_center( double R, const Point& p1, const Point& p2, Sing case_)
         {
                 double d = case_ * distance( p1, p2);
                 //double h = sqrt( ²(R) - ²(d/2.));
@@ -74,7 +67,7 @@ constex Point circle_center( double R, const Point& p1, const Point& p2, Sing ca
         };
 
 constex Circle( double R_, const Point& p1, const Point& p2, Sing case_)
-        : R( R_), O( circle_center( R_, p1, p2, case_))
+        : Point( circle_center( R_, p1, p2, case_)), R( R_)
         {};
 
 constex Circle& operator *= ( double scale)
@@ -113,8 +106,8 @@ Y = kX-n
 */
 
         // центр окр.
-        double a = circle.O.x;
-        double b = circle.O.y;
+        double a = circle.x;
+        double b = circle.y;
         double R²= ²(circle.R);
         //y и x - координаты ИСХОДНОЙ точки
         double x = src_p.x;
@@ -186,10 +179,10 @@ constex Arc( double r_, const Point& p1_, const Point& p2_, Sing case_, Sing dir
         {
                 //*((Circle *)this) *= scale;
                 *static_cast< Circle *>(this) *= scale;
-                p1.x = (p1.x - O.x) * scale + O.x;
-                p1.y = (p1.y - O.y) * scale + O.y;
-                p2.x = (p2.x - O.x) * scale + O.x;
-                p2.y = (p2.y - O.y) * scale + O.y;
+                p1.x = (p1.x - x) * scale + x;
+                p1.y = (p1.y - y) * scale + y;
+                p2.x = (p2.x - x) * scale + x;
+                p2.y = (p2.y - y) * scale + y;
                 return *this;
         };
 
@@ -197,8 +190,8 @@ friend  std::ostream& operator<<( std::ostream &os, const Arc& arc )
         {
                 constexpr int n = 20;
  
-                double a1 = angle( arc.p1.x - arc.O.x, arc.p1.y - arc.O.y );
-                double a2 = angle( arc.p2.x - arc.O.x, arc.p2.y - arc.O.y );
+                double a1 = angle( arc.p1.x - arc.x, arc.p1.y - arc.y );
+                double a2 = angle( arc.p2.x - arc.x, arc.p2.y - arc.y );
                 if( arc.direction == minus)
                         std::swap( a1, a2 );
 
@@ -206,8 +199,8 @@ friend  std::ostream& operator<<( std::ostream &os, const Arc& arc )
                 os << std::setprecision(5) << std::fixed;
                 for( int i = 0; i <= n; i++)
                 {
-                        double x = arc.O.x + arc.R * cos(a1);
-                        double y = arc.O.y + arc.R * sin(a1);
+                        double x = arc.x + arc.R * cos(a1);
+                        double y = arc.y + arc.R * sin(a1);
                         os << std::setw(8) << x << std::setw(12) << y << '\n';
                         a1 += Δa;
                 }
