@@ -26,11 +26,6 @@ namespace conexpr
         }
 }
 
-
-//#define DBL_MATb_EGO_MIN DBL_MIN
-#define DBL_MATb_EGO_MIN 0.0000001
-#define constex constexpr
-
 enum Sing { minus = -1, plus = 1 };
 
 constexpr double ²( double a)
@@ -41,9 +36,9 @@ constexpr double ²( double a)
 struct Point
 {
         double x, y;
-constex Point(                     ): x(0.), y(0.) {};
-constex Point( double x_, double y_): x(x_), y(y_) {};
-constex 
+constexpr Point(                     ): x(0.), y(0.) {};
+constexpr Point( double x_, double y_): x(x_), y(y_) {};
+constexpr 
 friend  double distance( const Point& p1, const Point& p2)
         {
                 return conexpr::sqrt( ²( p2.x - p1.x) + ²( p2.y - p1.y));
@@ -54,7 +49,7 @@ struct Circle: public Point
 {
         double R;
 
-constex static
+constexpr static
         Point circle_center( double R, const Point& p1, const Point& p2, Sing case_)
         {
                 double d = case_ * distance( p1, p2);
@@ -66,11 +61,11 @@ constex static
                             );                      
         };
 
-constex Circle( double R_, const Point& p1, const Point& p2, Sing case_)
+constexpr Circle( double R_, const Point& p1, const Point& p2, Sing case_)
         : Point( circle_center( R_, p1, p2, case_)), R( R_)
         {};
 
-constex Circle& operator *= ( double scale)
+constexpr Circle& operator *= ( double scale)
         {
                 R *= scale;
                 return *this;
@@ -138,10 +133,10 @@ struct Line
         Point p2;
         Sing direction;
 
-constex Line( const Point& p1_, const Point& p2_, Sing direction_ = plus )
+constexpr Line( const Point& p1_, const Point& p2_, Sing direction_ = plus )
         : p1( p1_), p2( p2_), direction( direction_)
         {};
-constex Line( const Circle& tangent_circle, const Point& p1_, Sing case_, Sing direction_ = plus )
+constexpr Line( const Circle& tangent_circle, const Point& p1_, Sing case_, Sing direction_ = plus )
         : p1( p1_), p2( tangent_point( tangent_circle, p1_, case_ )), direction( direction_)
         {};
 };
@@ -165,12 +160,12 @@ struct Arc: public Circle
         Point p2;
         Sing direction;
 
-constex Arc( const Circle& circle_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_ = plus )
+constexpr Arc( const Circle& circle_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_ = plus )
                 : Circle( circle_)
                 , p1( p1_), p2( p2_), direction( direction_)
         {};
 
-constex Arc( double r_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_ = plus )
+constexpr Arc( double r_, const Point& p1_, const Point& p2_, Sing case_, Sing direction_ = plus )
                 : Circle( r_, p1_, p2_, case_)
                 , p1( p1_), p2( p2_), direction( direction_)
         {};
