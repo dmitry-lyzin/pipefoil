@@ -151,6 +151,9 @@ statCE  Point center( double R, const Point& p1, const Point& p2, Sing case_)
 CE      Circle( const Point& center, double R_ )
         : R( R_), Point( center )
         {};
+CE      Circle( const Point& center            )
+        : R( 0.), Point( center )
+        {};
 CE      Circle( const Point& p1, const Point& p2, double R_, Sing case_)
         : R( R_), Point( center( R_, p1, p2, case_))
         {};
@@ -284,11 +287,7 @@ CE Point operator & ( const Circle& c1, const Circle& c2 ) { return cross( c1, c
 CE Point operator ^ ( const Circle& c1, const Circle& c2 ) { return cross( c1, c2, minus); }
 #pragma endregion
 
-// очередная дуга из цепочки соприкасающихся окружностей
-CE Arc chain_arc( const Point& prev_arc_end, const Circle& current, const Circle& next )
-{
-        return Arc( current, prev_arc_end, cross( next, Line( next, current), plus) );
-}
+#pragma region // функции поиска касательных и перпендикуляров
 
 // касательная к окружностям c1 и c2
 CE Line tangent_line( const Circle& c1, const Circle& c2, Sing sing = plus )
@@ -330,13 +329,6 @@ CE Segment tangent_segment( const Circle& c1, const Circle& c2, Sing sing = plus
         return Segment( tl, foot_of_perpendicular( tl, c1), foot_of_perpendicular( tl, c2) );
 }
 
-// отрезок, исходящей из точки p и касающийся окружности c
-CE Segment tangent_segment( const Circle& c1, const Point& p, Sing sing = plus )
-{
-        Line tl = tangent_line( c1, Circle( p, 0.), sing );
-        return Segment( tl, foot_of_perpendicular( tl, c1), p );
-}
-
 // поиск точки касания прямой исходящей из точки p и окружности c
 CE Point tangent_point( const Circle& c1, const Point& p, Sing sing = plus )
 {
@@ -351,18 +343,18 @@ CE Arc tangent_arc( const Circle& c, const Point& p, double R, Sing sing = plus 
         return Arc( center, R, p, cross( c, Line(c, center), -sing) );
 }
 
-// окруж. радиусом R, через точку p и касательная к окружности c
-CE Circle tangent_сircle( const Circle& c, const Point& p, double R, Sing sing = plus )
-{
-        Point center = cross( Circle( p, R), Circle( c, R-c.R), sing );
-        return Circle( center, R );
-}
-
 // окруж. радиусом R, касательная к окружностям c1 и c2
 CE Circle tangent_сircle( const Circle& c1, const Circle& c2, double R, Sing sing = plus )
 {
-        Point center = cross( Circle( c1, c1.R-R), Circle( c2, c2.R-R), sing );
+        Point center = cross( Circle( c1, R-c1.R), Circle( c2, R-c2.R), sing );
         return Circle( center, R );
+}
+#pragma endregion
+
+// очередная дуга из цепочки соприкасающихся окружностей
+CE Arc chain_arc( const Point& prev_arc_end, const Circle& current, const Circle& next )
+{
+        return Arc( current, prev_arc_end, cross( next, Line( next, current), plus) );
 }
 
 int main( int argc, const char *argv[])
