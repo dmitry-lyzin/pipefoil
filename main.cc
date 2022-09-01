@@ -2,10 +2,12 @@
 #include <iomanip>
 #include <cmath>
 #include <cstdlib>
-//#include <limits>   
+#include <clocale>
 
 #define CE     constexpr
-#define statCE constexpr static
+#define CEstat constexpr static
+#define CEexpl constexpr explicit
+#define CEfrnd constexpr friend
 
 CE double π = 3.14159265358979323846;
 
@@ -17,8 +19,8 @@ public:
 CE      Sing(): value(1) {};
 CE      operator int   () const { return  value; };
 CE      Sing operator- () const { return -value; };
-statCE  Sing plus      ()       { return      1; };
-statCE  Sing minus     ()       { return     -1; };
+CEstat  Sing plus      ()       { return      1; };
+CEstat  Sing minus     ()       { return     -1; };
 };
 
 CE Sing plus  = Sing::plus();
@@ -52,21 +54,39 @@ CE double root_of_quadratic_equation( double A, double B, double C, Sing sing = 
         return (-B + sing * conexpr::sqrt( B*B - 4.*A*C ))/(2.*A);
 }
 
-CE double ²( double a)
+CE inline double ²( double a)
 {
         return a * a;
+}
+
+CE inline bool equal( double a, double b)
+{
+        if( (a -= b) < 0 )
+                a = -a;
+        return a < 0.00001; // std::numeric_limits< double>::epsilon() ?
 }
 
 struct Point
 {
         double x, y;
-CE      Point(                     ): x(0.), y(0.) {};
-CE      Point( double x_, double y_): x(x_), y(y_) {};
-CE 
-friend  double distance( const Point& p1, const Point& p2)
+
+CE      Point( double x_, double y_): x( x_), y( y_) {};
+CE      bool operator == ( const Point& r) const { return equal( x, r.x) && equal( y, r.y); };
+CE      bool operator != ( const Point& r) const { return !(*this == r);                    };
+CEfrnd  double distance( const Point& p1, const Point& p2)
         {
                 return conexpr::sqrt( ²( p2.x - p1.x) + ²( p2.y - p1.y));
         }
+friend  std::ostream& operator<<( std::ostream &os, const Point& p )
+        {
+                static Point last( NAN, NAN);
+                if( last != p )
+                {
+                        os << std::setw(8) << p.x << std::setw(12) << p.y << '\n';
+                        last = p;
+                }
+                return os;
+        };
 };
 
 struct Line
@@ -86,10 +106,8 @@ CE      Line( const Point& p1, const Point& p2 )
 
 friend  std::ostream& operator<<( std::ostream &os, const Line& obj )
         {
-                os << std::setprecision(5) << std::fixed
-                   << std::setw(8) << 0.0 << std::setw(12) << (-obj.c/obj.b) << '\n'
-                   << std::setw(8) << (-obj.c/obj.a) << std::setw(12) << 0.0 << '\n';
-
+                os << Point( 0.0, -obj.c/obj.b)
+                   << Point( -obj.c/obj.a, 0.0);
                 return os;
         };
 };
@@ -125,10 +143,7 @@ CE      Segment operator - () const { return Segment( this->p2, this->p1 ); }
 
 friend  std::ostream& operator<<( std::ostream &os, const Segment& obj )
         {
-                os << std::setprecision(5) << std::fixed
-                   //<< std::setw(8) << obj.p1.x << std::setw(12) << obj.p1.y << '\n'
-                   << std::setw(8) << obj.p2.x << std::setw(12) << obj.p2.y << '\n';
-
+                os << obj.p1 << obj.p2;
                 return os;
         };
 };
@@ -137,7 +152,7 @@ struct Circle: public Point
 {
         double R;
 
-statCE  Point center( double R, const Point& p1, const Point& p2, Sing case_)
+CEstat  Point center( double R, const Point& p1, const Point& p2, Sing case_)
         {
                 double d = case_ * distance( p1, p2);
                 //double h = sqrt( ²(R) - ²(d/2.));
@@ -157,6 +172,32 @@ CE      Circle( const Point& center            )
 CE      Circle( const Point& p1, const Point& p2, double R_, Sing case_)
         : R( R_), Point( center( R_, p1, p2, case_))
         {};
+
+CE      Circle operator - () const
+        {
+                Circle a = *this;
+                a.R = -a.R;
+                return a;
+        }
+
+        void print( std::ostream &os, double a1, double a2 ) const
+        {
+                // вычисляем кол. сегментов
+                int segments = static_cast< int>( round( abs( (a2 - a1) / (2.* π) * 160))); // на круг - 160 сегментов, примерно
+                double Δa = (a2 - a1) / segments;
+                double r = abs( R);
+                for( ; segments >= 0; --segments )
+                {
+                        //os << std::setprecision(0) << std::fixed << a1*180/π << "*   " << std::setprecision(5) << std::fixed;
+                        os << Point( x + r * cos(a1), y + r * sin(a1));
+                        a1 += Δa;
+                }
+        };
+friend  std::ostream& operator<<( std::ostream &os, const Circle& c )
+        {
+                c.print( os, 0., 2.*π );
+                return os;
+        };
 };
 
 struct Arc: public Circle
@@ -182,7 +223,7 @@ CE      Arc operator - () const
                 return a;
         }
 
-statCE  double angle( double Δx, double Δy )
+CEstat  double angle( double Δx, double Δy )
         {
                 if( Δx > +0. ) return atan( Δy / Δx );
                 if( Δx < -0. ) return atan( Δy / Δx ) + π;
@@ -198,28 +239,13 @@ friend  std::ostream& operator<<( std::ostream &os, const Arc& arc )
                 double a1 = angle( arc.p1.x - arc.x, arc.p1.y - arc.y );
                 double a2 = angle( arc.p2.x - arc.x, arc.p2.y - arc.y );
 
-                double R = arc.R;
-                if( R < 0. )
+                if( arc.R < 0. )
                 {
-                        R = -R;
-                        if( a1 > a2) a2 += 2.* π;
-                        else         a1 += 2.* π;
+                        if( a1 >= a2) a2 += 2.* π;
+                        else          a1 += 2.* π;
                 }
 
-                // вычисляем кол. сегментов
-                //CE int n = 20;
-                double n = abs( round( (a2 - a1) / (2.* π) * 160));
-                double Δa = (a2 - a1) / n;
-                os << std::setprecision(5) << std::fixed;
-                for( int i = 0; i < n; i++)
-                {
-                        double x = arc.x + R * cos(a1);
-                        double y = arc.y + R * sin(a1);
-                        //os << std::setprecision(0) << std::fixed << a1*180/π << "*   " << std::setprecision(5) << std::fixed;
-                        os << std::setw(8) << x << std::setw(12) << y << '\n';
-                        a1 += Δa;
-                }
-
+                arc.print( os, a1, a2 );
                 return os;
         };
 };
@@ -357,45 +383,70 @@ CE Arc chain_arc( const Point& prev_arc_end, const Circle& current, const Circle
         return Arc( current, prev_arc_end, cross( next, Line( next, current), plus) );
 }
 
-int main( int argc, const char *argv[])
+const char *param_name[] =
+{ "диаметр_трубы"
+, "толщина_стенки_трубы"
+, "хорда"
+, "радиус_передней_кромки"
+, "радиус_скругл_передней_кромки"
+};
+
+int main( unsigned argc, const char *argv[])
 {
-        /*
-        double b_abs   = atof( argv[1]); //  50.0; // хорда профиля
-        double D_abs   = atof( argv[2]); // 160.0; // диаметр трубы
-        double s_abs   = atof( argv[3]); //   4.7; // толщина стенки трубы
-        double lr1_abs = atof( argv[4]); //   1.5; // радиус скругл. носка 1
-        double lr2_abs = atof( argv[5]); //  18.0; // радиус скругл. носка 2
-        */
-        
-        CE double b_abs   =  40.0; // хорда профиля
-        CE double D_abs   = 110.0; // диаметр трубы
-        CE double s_abs   =   2.7; // толщина стенки трубы
-        CE double lr1_abs =   1.0; // радиус скругл. носка 1
-        CE double lr2_abs =  18.0; // радиус скругл. носка 2
-        
-        CE double R   = D_abs/2./ b_abs; // относительный внешний радиус трубы
-        CE double s   = s_abs   / b_abs; // относительная толщина стенки трубы
-        CE double s½  = s / 2.         ; // относительная полутолщина стенки трубы
-        CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
-        CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 2
+        double param[ std::size( param_name)];
+
+        double &D_abs   = param[0]; // 160.0; // диаметр трубы
+        double &s_abs   = param[1]; //   4.7; // толщина стенки трубы
+        double &b_abs   = param[2]; //  50.0; // хорда профиля
+        double &ler_abs = param[3]; //   1.5; // радиус передней кромки
+        double &lef_abs = param[4]; //  18.0; // радиус скругл. передней кромки
+
+        if( argc <= std::size( param_name) )
+        {
+                setlocale( LC_ALL, "" );
+                std::cerr << "Параметры запуска:\npipefoil";
+                for( unsigned i = 0; i < std::size( param_name); ++i)
+                        std::cerr << ' ' << param_name[ i ];
+                std::cerr << '\n';
+                return 1;
+        }
+
+        for( unsigned i = 0; i < std::size( param); ++i)
+        {
+                char *last_char;
+                param[i] = strtod( argv[i+1], &last_char);
+                if( *last_char)
+                {
+                        setlocale( LC_ALL, "" );
+                        std::cerr << "Ошибка параметра " << param_name[i] << "\n"
+                                     "\"" << argv[i+1] << "\" распозналось как \"" << param[i] << "\"\n";
+                        return 1;
+                }
+        }
+
+        double R   = D_abs/2./ b_abs; // относительный внешний радиус трубы
+        double s   = s_abs   / b_abs; // относительная толщина стенки трубы
+        double ler = ler_abs / b_abs; // относительный радиус передней кромки
+        double lef = lef_abs / b_abs; // относительный радиус скругл. передней кромки
 
         CE Point TE1( 1.,  0.00001); // задняя кромка верх
-        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+        CE Point TE2( 1., -0.00001); // задняя кромка низ, между ними зазор для соблюдения  
                                      // постулата Жуковского-Чаплыгина (Kutta condition)
-        CE Circle  c_lead({0, s½}, s½ );
-        CE Circle  с_top = tangent_сircle( c_lead, TE1, R, minus );
-        CE Circle  c_bottom( с_top, R-s );
-        CE Segment s_end = tangent_segment( c_bottom, TE2, minus );
-        CE Circle  c_l1( Vertical( lr1) & Circle( с_top, c_bottom.R+lr1), lr1 );
-        CE Circle  c_l2 = tangent_сircle( с_top, c_l1, lr2 );
+        Circle  c_le   ( {ler, ler}, -ler );
+        Circle  c_trail( TE1       , -s   );
+        Circle  c_bottom = tangent_сircle( c_le, c_trail, R-s, minus );
+        Circle  с_top( c_bottom, R );
+        Circle  c_lef = tangent_сircle( -c_le, с_top, lef );
+        Segment s_end = tangent_segment( c_bottom, TE2, minus );
 
-        CE Arc a_top = chain_arc( TE1      , с_top , c_l2     );
-        CE Arc a_l2  = chain_arc( a_top.p2 , c_l2  , c_l1     );
-        CE Arc a_l1  = chain_arc( a_l2.p2  , c_l1  , c_bottom );
-        CE Arc a_bottom( c_bottom, a_l1.p2, s_end.p1 );
+        Arc a_top = chain_arc( TE1     , с_top, c_lef    );
+        Arc a_lef = chain_arc( a_top.p2, c_lef, c_le     );
+        Arc a_le  = chain_arc( a_lef.p2, c_le , c_bottom );
+        Arc a_bottom( c_bottom, a_le.p2, s_end.p1 );
 
-        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
-                  << a_top << a_l2 << -a_l1 << a_bottom << s_end;
+        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
+                  << std::setprecision(5) << std::fixed
+                  << a_top << a_lef << a_le << a_bottom << s_end;
 
         return 0;
 }
