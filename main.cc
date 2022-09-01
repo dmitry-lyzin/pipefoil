@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <clocale>
 
 #define CE     constexpr
@@ -16,7 +17,6 @@ class Sing
         int value;
 CE      Sing( int x): value(x) {};
 public:
-CE      Sing(): value(1) {};
 CE      operator int   () const { return  value; };
 CE      Sing operator- () const { return -value; };
 CEstat  Sing plus      ()       { return      1; };
@@ -383,16 +383,209 @@ CE Arc chain_arc( const Point& prev_arc_end, const Circle& current, const Circle
         return Arc( current, prev_arc_end, cross( next, Line( next, current), plus) );
 }
 
-const char *param_name[] =
-{ "диаметр_трубы"
-, "толщина_стенки_трубы"
-, "хорда"
-, "радиус_передней_кромки"
-, "радиус_скругл_передней_кромки"
-};
+#ifndef NDEBUG
+int test1()
+{
+        // профиль со скруглением сверху носка
+
+        CE double b_abs   =  40.0; // хорда профиля
+        CE double D_abs   = 110.0; // диаметр трубы
+        CE double s_abs   =   2.7; // толщина стенки трубы
+        CE double lr1_abs =   1.0; // радиус скругл. носка 1
+        CE double lr2_abs =  18.0; // радиус скругл. носка 2
+
+        CE double R   = D_abs/2./ b_abs; // относительный внешний радиус трубы
+        CE double s   = s_abs   / b_abs; // относительная толщина стенки трубы
+        CE double s½  = s / 2.         ; // относительная полутолщина стенки трубы
+        CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
+        CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 2
+
+        CE Point TE1( 1.,  0.00001); // задняя кромка верх
+        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+                                     // постулата Жуковского-Чаплыгина (Kutta condition)
+        CE Circle  c_lead({0, s½}, s½ );
+        CE Circle  с_top = tangent_сircle( c_lead, TE1, R, minus );
+        CE Circle  c_bottom( с_top, R-s );
+        CE Segment s_end = tangent_segment( c_bottom, TE2, minus );
+        CE Circle  c_l1( Vertical( lr1) & Circle( с_top, c_bottom.R+lr1), lr1 );
+        CE Circle  c_l2 = tangent_сircle( с_top, c_l1, lr2 );
+
+        CE Arc a_top = chain_arc( TE1      , с_top , c_l2     );
+        CE Arc a_l2  = chain_arc( a_top.p2 , c_l2  , c_l1     );
+        CE Arc a_l1  = chain_arc( a_l2.p2  , c_l1  , c_bottom );
+        CE Arc a_bottom( c_bottom, a_l1.p2, s_end.p1 );
+
+        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
+                << std::setprecision(5) << std::fixed
+                << a_top << a_l2 << -a_l1 << a_bottom << s_end;
+
+        return 0;
+}
+int test2()
+{
+        /*
+        // круглая ПК немного сверху зализана и заостренная ЗК 
+        // Cy/Cx = 25 при α ≈ 5° плоская полка α ≈ 0÷5°, срыв при α ≈ 7,5°
+        CE double b_abs   =  50.0; // хорда профиля
+        CE double D_abs   = 160.0; // диаметр трубы
+        CE double s_abs   =   4.7; // толщина стенки трубы
+        CE double lr1_abs =   1.0; // радиус скругл. носка 1
+        CE double lr2_abs =  20.0; // радиус скругл. носка 2
+        */
+        // просто круглая ПК и заостренная ЗК
+        // Cy/Cx = 28 при α ≈ 5,2° очень узкий пик, срыв при α ≈ 5,2°
+        CE double b_abs   =  40.0; // хорда профиля
+        CE double D_abs   = 110.0; // диаметр трубы
+        CE double s_abs   =   2.7; // толщина стенки трубы
+        CE double lr1_abs =   1.3; // радиус скругл. носка 1
+        CE double lr2_abs =  18.0; // радиус скругл. носка 2
+
+        CE double R   = D_abs/2./ b_abs; // относительный внешний радиус трубы
+        CE double s   = s_abs   / b_abs; // относительная толщина стенки трубы
+        CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
+
+        CE Point TE1( 1.,  0.00001); // задняя кромка верх
+        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+                                     // постулата Жуковского-Чаплыгина (Kutta condition)
+        CE Circle  c_lead({lr1, lr1}, lr1 );
+        CE Circle  с_top = tangent_сircle( c_lead, TE1, R, minus );
+        CE Circle  c_bottom( с_top, R-s );
+        CE Segment s_start = tangent_segment( c_lead, -c_bottom );
+        CE Segment s_end = tangent_segment( c_bottom, TE2, minus );
+
+        CE Arc a_top = chain_arc( TE1, с_top, c_lead      );
+        CE Arc a_lead  ( c_lead  , a_top.p2  , s_start.p1 );
+        CE Arc a_bottom( c_bottom, s_start.p2, s_end.p1   );
+
+        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
+                << std::setprecision(5) << std::fixed
+                << a_top << -a_lead << s_start << a_bottom << s_end;
+
+        return 0;
+}
+int test3()
+{
+        // ровная нижняя поверхность (предполагался скотч)
+        // Cy/Cx = 31 при α = 6,5°
+
+        CE double b_abs   =  50.0; // хорда профиля
+        CE double D_abs   = 160.0; // диаметр трубы
+        CE double s_abs   =   4.7; // толщина стенки трубы
+        CE double lr1_abs =   1.5; // радиус скругл. носка 1
+        CE double lr2_abs =  20.0; // радиус скругл. носка 2
+
+        CE double R   = D_abs/2./ b_abs; // относительный внешний радиус трубы
+        CE double s   = s_abs   / b_abs; // относительная толщина стенки трубы
+        CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
+        CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 1
+
+        CE Point TE1( 1.,  0.00001); // задняя кромка верх
+        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+                                     // постулата Жуковского-Чаплыгина (Kutta condition)
+        CE Circle  c_l1   ( {lr1, lr1}, lr1 );
+        CE Circle  c_trail( TE1       , -s  );
+        CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s, minus );
+        CE Circle  с_top( c_bottom, R );
+        CE Circle  c_l2  = tangent_сircle( c_l1, с_top, lr2 );
+        CE Segment s_end = tangent_segment( c_l1, TE2 );
+
+        CE Arc a_top = chain_arc( TE1     , с_top, c_l2 );
+        CE Arc a_l2  = chain_arc( a_top.p2, c_l2 , c_l1 );
+        CE Arc a_l1( c_l1, a_l2.p2, s_end.p1 );
+
+        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
+                << std::setprecision(5) << std::fixed
+                << a_top << a_l2 << a_l1 << s_end;
+
+        return 0;
+}
+int test4()
+{
+        // ровная нижняя поверхность (предполагался скотч, но он оторвался)
+        // тупой пик, Cy/Cx > 30 α ≈ 5÷9°, Cy/Cx ≈ 34 α ≈ 6.6°, срыв α ≈ 15°
+        CE double b_abs   =  50.0; // хорда профиля
+        CE double D_abs   = 160.0; // диаметр трубы
+        CE double s_abs   =   4.7; // толщина стенки трубы
+        CE double lr1_abs =   1.5; // радиус скругл. носка 1
+        CE double lr2_abs =  20.0; // радиус скругл. носка 2
+
+        CE double R   = D_abs/2./ b_abs; // относительный внешний радиус трубы
+        CE double s   = s_abs   / b_abs; // относительная толщина стенки трубы
+        CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
+        CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 1
+
+        CE Point TE1( 1.,  0.00001); // задняя кромка верх
+        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+                                     // постулата Жуковского-Чаплыгина (Kutta condition)
+        CE Circle  c_l1   ( {lr1, lr1}, lr1 );
+        CE Circle  c_trail( TE1       , -s  );
+        CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s, minus );
+        CE Circle  с_top( c_bottom, R );
+        CE Circle  c_l2  = tangent_сircle( c_l1, с_top, lr2 );
+        CE Segment s_end0 = tangent_segment( c_l1, TE2 );
+
+        CE Arc a_top = chain_arc( TE1     , с_top, c_l2 );
+        CE Arc a_l2  = chain_arc( a_top.p2, c_l2 , c_l1 );
+        CE Arc a_l1( c_l1, a_l2.p2, s_end0.p1 );
+
+        CE Segment s_start( s_end0.p1, s_end0 & c_bottom );
+        CE Segment s_end( s_end0 ^ c_bottom, TE2 );
+        CE Arc a_bottom( c_bottom, s_start.p2, s_end.p1 );
+
+        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
+                << std::setprecision(5) << std::fixed
+                << a_top << a_l2 << a_l1 << s_start << a_bottom << s_end;
+
+        return 0;
+}
+int test5()
+{
+        // круглая ПК немного сверху зализана и заостренная ЗК
+        // тупой пик, Cy/Cx > 30 α ≈ 4.5÷9.5°, Cy/Cx ≈ 35 α ≈ 6.6°, срыв α ≈ 15°
+        CE double b_abs   =  50.0; // хорда профиля
+        CE double D_abs   = 160.0; // диаметр трубы
+        CE double s_abs   =   4.7; // толщина стенки трубы
+        CE double lr1_abs =   1.5; // радиус скругл. носка 1
+        CE double lr2_abs =  20.0; // радиус скругл. носка 2
+
+        CE double R   = D_abs/2./ b_abs; // относительный внешний радиус трубы
+        CE double s   = s_abs   / b_abs; // относительная толщина стенки трубы
+        CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
+        CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 1
+
+        CE Point TE1( 1.,  0.00001); // задняя кромка верх
+        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+                                     // постулата Жуковского-Чаплыгина (Kutta condition)
+        CE Circle  c_l1   ( {lr1, lr1}, lr1 );
+        CE Circle  c_trail( TE1       , -s  );
+        CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s, minus );
+        CE Circle  с_top( c_bottom, R );
+        CE Circle  c_l2  = tangent_сircle( c_l1, с_top, lr2 );
+        CE Segment s_end = tangent_segment( c_bottom, TE2, minus );
+
+        CE Arc a_top = chain_arc( TE1     , с_top, c_l2     );
+        CE Arc a_l2  = chain_arc( a_top.p2, c_l2 , c_l1     );
+        CE Arc a_l1  = chain_arc( a_l2.p2 , c_l1 , c_bottom );
+        CE Arc a_bottom( c_bottom, a_l1.p2, s_end.p1 );
+
+        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << lr1_abs << '\n'
+                << std::setprecision(5) << std::fixed
+                << a_top << a_l2 << -a_l1 << a_bottom << s_end;
+
+        return 0;
+}
+#endif
 
 int main( unsigned argc, const char *argv[])
 {
+        static CE char *param_name[] =
+        { "диаметр_трубы"
+                , "толщина_стенки_трубы"
+                , "хорда"
+                , "радиус_передней_кромки"
+                , "радиус_зализа_над_передней_кромкой"
+        };
+
         double param[ std::size( param_name)];
 
         double &D_abs   = param[0]; // 160.0; // диаметр трубы
@@ -400,6 +593,22 @@ int main( unsigned argc, const char *argv[])
         double &b_abs   = param[2]; //  50.0; // хорда профиля
         double &ler_abs = param[3]; //   1.5; // радиус передней кромки
         double &lef_abs = param[4]; //  18.0; // радиус скругл. передней кромки
+
+#ifndef NDEBUG
+        if( argc == 3 )
+        {
+                int n = 0;
+                if( !strcmp( argv[1], "test") && ( n = atoi( argv[2])) )
+                {
+                        static CE int (*checks[])() = { &test1, &test2, &test3, &test4, &test5 };
+                        if( (n > 0) && (n <= std::size( checks)) )
+                                return checks[ n-1 ]();
+                }
+                setlocale( LC_ALL, "" );
+                std::cerr << "Ошибка тестов!\n";
+                return 1;
+        }
+#endif
 
         if( argc <= std::size( param_name) )
         {
