@@ -136,12 +136,6 @@ CE      Matrix2x2( const Vec& v1, const Vec& v2 ): s1( v1), s2( v2) {};
 CE      Vec operator * ( const Vec& v) const { return { (s1, v), (s2, v) }; }
 };
 
-struct Point: public Vec
-{
-CE      Point( const Vec& v        ): Vec( v     ) {};
-CE      Point( double x_, double y_): Vec( x_, y_) {};
-};
-
 struct Line
 {
         Vec norm;
@@ -154,7 +148,7 @@ CE      Line( const Vec& 𝐧, double 𝐶 )
         : norm( 𝐧 ), c( 𝐶 )
         {};
         // через точки p1 и p2
-CE      Line( const Point& p1, const Point& p2 )
+CE      Line( const Vec& p1, const Vec& p2 )
         : norm( perp(p2 - p1))
         , c( -(p1, perp(p2)) )
         {};
@@ -164,8 +158,8 @@ CE      Line( const Point& p1, const Point& p2 )
 
 friend  std::ostream& operator<<( std::ostream &os, const Line& obj )
         {
-                //os << Point( 0.0, -obj.c/obj.norm.y)
-                //   << Point( -obj.c/obj.norm.x, 0.0);
+                //os << Vec( 0.0, -obj.c/obj.norm.y)
+                //   << Vec( -obj.c/obj.norm.x, 0.0);
                 return os;
         };
 };
@@ -182,16 +176,15 @@ CE      Horizontal( double y0 ): Line( {0., 1.}, -y0) {};
 
 struct Segment: public Line
 {
-        Point p1;
-        Point p2;
+        Vec p1, p2;
 
-CE      Segment( const Point& p1_, const Point& p2_ )
+CE      Segment( const Vec& p1_, const Vec& p2_ )
         : Line( p1_, p2_ )
         , p1( p1_), p2( p2_)
         {};
 
         // TODO стремный конст-ор, как бы его спрятать
-CE      Segment( const Line& l, const Point& p1_, const Point& p2_ )
+CE      Segment( const Line& l, const Vec& p1_, const Vec& p2_ )
         : Line( l )
         , p1( p1_), p2( p2_)
         {};
@@ -206,31 +199,32 @@ friend  std::ostream& operator<<( std::ostream &os, const Segment& obj )
         };
 };
 
-struct Circle: public Point
+struct Circle
 {
+        Vec o;
         double R;
 
         // центр проходящей через две точки окружность с радиусом R
-CEstat  Point center( const Point& p1, const Point& p2, double R, Sing case_)
+CEstat  Vec center( const Vec& p1, const Vec& p2, double R, Sing case_)
         {
                 double d = case_ * ~( p1 - p2);
                 //double h = sqrt( ²(R) - ²(d/2.));
                 double h_div_d = ce::sqrt( ²(R) - ²(d/2.)) / d;
 
-                return Point( (p2.x + p1.x)/2. + (p2.y - p1.y) * h_div_d
-                            , (p2.y + p1.y)/2. - (p2.x - p1.x) * h_div_d
-                            );                      
+                return { (p2.x + p1.x)/2. + (p2.y - p1.y) * h_div_d
+                       , (p2.y + p1.y)/2. - (p2.x - p1.x) * h_div_d
+                       };                      
         };
 
-CE      Circle( const Point& center, double R_ )
-        : R( R_), Point( center )
+CE      Circle( const Vec& center, double R_ )
+        : R( R_), o( center )
         {};
-CE      Circle( const Point& center            )
-        : R( 0.), Point( center )
+CE      Circle( const Vec& center            )
+        : R( 0.), o( center )
         {};
         // проходящая через две точки окружность с радиусом R_
-CE      Circle( const Point& p1, const Point& p2, double R_, Sing case_)
-        : R( R_), Point( center( p1, p2, R_, case_))
+CE      Circle( const Vec& p1, const Vec& p2, double R_, Sing case_)
+        : R( R_), o( center( p1, p2, R_, case_))
         {};
 
 CE      Circle operator - () const
@@ -249,7 +243,7 @@ CE      Circle operator - () const
                 for( ; segments >= 0; --segments )
                 {
                         //os << std::setprecision(0) << std::fixed << a1*180/π << "*   " << std::setprecision(5) << std::fixed;
-                        os << Point( x + r * cos(a1), y + r * sin(a1));
+                        os << Vec( o.x + r * cos(a1), o.y + r * sin(a1));
                         a1 += Δa;
                 }
         };
@@ -262,15 +256,14 @@ friend  std::ostream& operator<<( std::ostream &os, const Circle& c )
 
 struct Arc: public Circle
 {
-        Point p1;
-        Point p2;
+        Vec p1, p2;
         
-CE      Arc( const Circle& circle, const Point& start, const Point& finish )
+CE      Arc( const Circle& circle, const Vec& start, const Vec& finish )
         : Circle( circle)
         , p1( start), p2( finish)
         {};
 
-CE      Arc( const Point& center, double R_, const Point& start, const Point& finish )
+CE      Arc( const Vec& center, double R_, const Vec& start, const Vec& finish )
         : Circle( center, R_ )
         , p1( start), p2( finish)
         {};
@@ -285,8 +278,8 @@ CE      Arc operator - () const
 
 friend  std::ostream& operator<<( std::ostream &os, const Arc& arc )
         {
-                double a1 = angle( arc.p1 - arc );
-                double a2 = angle( arc.p2 - arc );
+                double a1 = angle( arc.p1 - arc.o );
+                double a2 = angle( arc.p2 - arc.o );
 
                 if( arc.R < 0. )
                 {
@@ -308,9 +301,9 @@ CE Vec pr( const Vec& 𝐫, const Line& l)
 }
 
 #pragma region // функции поиска пересечений
-CE Point cross( const Circle& c, const Line& l, Sing sing = plus )
+CE Vec cross( const Circle& c, const Line& l, Sing sing = plus )
 {
-        const Vec&   𝐨  = c;            // центр окружности
+        const Vec&   𝐨  = c.o;          // центр окружности
         const double 𝘳² = c.R*c.R;      // квадрат радиуса окружности
 
         Vec 𝐬 = pr( 𝐨, l);              // точка проекции центра окружности на прямую
@@ -321,10 +314,10 @@ CE Point cross( const Circle& c, const Line& l, Sing sing = plus )
         return 𝐬 - 𝐯₁ * sing;
 }
 
-CE Point cross( const Circle& c1, const Circle& c2, Sing sing = plus )
+CE Vec cross( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
-        const Vec& 𝐨₁ = c1; // радиус-вектор центра окружности 1
-        const Vec& 𝐨₂ = c2; // радиус-вектор центра окружности 2
+        const Vec& 𝐨₁ = c1.o; // радиус-вектор центра окружности 1
+        const Vec& 𝐨₂ = c2.o; // радиус-вектор центра окружности 2
 
         Line radical_line( (𝐨₂ - 𝐨₁) * 2. 
                          , (𝐨₁, 𝐨₁) - (𝐨₂, 𝐨₂) + ²(c2.R) - ²(c1.R)
@@ -336,25 +329,25 @@ CE Point cross( const Circle& c1, const Circle& c2, Sing sing = plus )
 // сахарок синтаксический
 
 // первая точка пересечения окружности и линии
-CE Point operator & ( const Circle& c,  const Line& l    ) { return cross( c, l, plus   ); }
+CE Vec operator & ( const Circle& c,  const Line& l    ) { return cross( c, l, plus   ); }
 // первая точка пересечения линии и окружности
-CE Point operator & ( const Line& l,    const Circle& c  ) { return cross( c, l, plus   ); }
+CE Vec operator & ( const Line& l,    const Circle& c  ) { return cross( c, l, plus   ); }
 // вторая точка пересечения окружности и линии
-CE Point operator ^ ( const Circle& c,  const Line& l    ) { return cross( c, l, minus  ); }
+CE Vec operator ^ ( const Circle& c,  const Line& l    ) { return cross( c, l, minus  ); }
 // вторая точка пересечения линии и окружности
-CE Point operator ^ ( const Line& l,    const Circle& c  ) { return cross( c, l, minus  ); }
+CE Vec operator ^ ( const Line& l,    const Circle& c  ) { return cross( c, l, minus  ); }
 // первая точка пересечения окружности и окружности
-CE Point operator & ( const Circle& c1, const Circle& c2 ) { return cross( c1, c2, plus ); }
+CE Vec operator & ( const Circle& c1, const Circle& c2 ) { return cross( c1, c2, plus ); }
 // вторая точка пересечения окружности и окружности
-CE Point operator ^ ( const Circle& c1, const Circle& c2 ) { return cross( c1, c2, minus); }
+CE Vec operator ^ ( const Circle& c1, const Circle& c2 ) { return cross( c1, c2, minus); }
 #pragma endregion
 
-#pragma region // функции поиска касательных и перпендикуляров
+#pragma region // функции поиска касательных
 
 // касательная к окружностям c1 и c2
 CE Line tangent_line( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
-        Vec c21 = (Vec)c2 - c1;
+        Vec c21 = c2.o - c1.o;
         double l = ~c21;
         NVec c21n( c21, l );
         double cosθ = (c2.R - c1.R)/l; // θ - угол между линией центров и касательной
@@ -366,52 +359,42 @@ CE Line tangent_line( const Circle& c1, const Circle& c2, Sing sing = plus )
 
         Vec cr = R * c21n;
 
-        return Line( cr, c1.R - (cr, c1));
-}
-
-// опустить перпендикуляр из точки 𝐫 на прямую l
-CE Segment perpendicular( const Line& l, const Vec& 𝐫 )
-{
-        const double& 𝐶 = l.c;                  // параметр 𝐶 из уравнения прямой 𝐴𝑥 + 𝐵𝑦 + 𝐶 = 0
-        const Vec& 𝐧 = l.norm;                  // перпедикуляр к прямой
-        Point P = 𝐫 - 𝐧 * ((𝐫, 𝐧) + 𝐶) / (𝐧, 𝐧);// точка проекции на прямую
-
-        return { Line(𝐧, P), 𝐫, P };
+        return Line( cr, c1.R - (cr, c1.o));
 }
 
 // касательная к окружностям c1 и c2
 CE Segment tangent_segment( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
         Line tl = tangent_line( c1, c2, -sing );
-        return Segment( tl, pr( c1, tl ), pr( c2, tl ) );
+        return Segment( tl, pr( c1.o, tl ), pr( c2.o, tl ) );
 }
 
 // поиск точки касания прямой исходящей из точки p и окружности c
-CE Point tangent_point( const Circle& c1, const Point& p, Sing sing = plus )
+CE Vec tangent_point( const Circle& c1, const Vec& p, Sing sing = plus )
 {
         Line tl = tangent_line( c1, Circle( p, 0.), sing );
-        return pr( c1, tl );
+        return pr( c1.o, tl );
 };
 
 // дуга радиусом R, исходящая из точки p и касательная к окружности c
-CE Arc tangent_arc( const Circle& c, const Point& p, double R, Sing sing = plus )
+CE Arc tangent_arc( const Circle& c, const Vec& p, double R, Sing sing = plus )
 {
-        Point center = cross( Circle( p, R), Circle( c, R-c.R), sing );
-        return Arc( center, R, p, cross( c, Line(c, center), -sing) );
+        Vec center = cross( Circle( p, R), Circle( c.o, R-c.R), sing );
+        return Arc( center, R, p, cross( c, Line(c.o, center), -sing) );
 }
 
 // окруж. радиусом R, касательная к окружностям c1 и c2
 CE Circle tangent_сircle( const Circle& c1, const Circle& c2, double R, Sing sing = plus )
 {
-        Point center = cross( Circle( c1, R-c1.R), Circle( c2, R-c2.R), -sing );
+        Vec center = cross( Circle( c1.o, R-c1.R), Circle( c2.o, R-c2.R), -sing );
         return Circle( center, R );
 }
 #pragma endregion
 
 // очередная дуга из цепочки соприкасающихся окружностей
-CE Arc chain_arc( const Point& prev_arc_end, const Circle& current, const Circle& next, Sing sing = plus )
+CE Arc chain_arc( const Vec& prev_arc_end, const Circle& current, const Circle& next, Sing sing = plus )
 {
-        return Arc( current, prev_arc_end, cross( next, Line( next, current), -sing) );
+        return Arc( current, prev_arc_end, cross( next, Line( next.o, current.o), -sing) );
 }
 
 #ifndef NDEBUG
@@ -431,14 +414,14 @@ int test1()
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
         CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 2
 
-        CE Point TE1( 1.,  0.00001); // задняя кромка верх
-        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
+        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
                                      // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_lead({0, s½}, s½ );
         CE Circle  с_top = tangent_сircle( c_lead, TE1, R );
-        CE Circle  c_bottom( с_top, R-s );
+        CE Circle  c_bottom( с_top.o, R-s );
         CE Segment s_end = tangent_segment( c_bottom, TE2 );
-        CE Circle  c_l1( Vertical( lr1) & Circle( с_top, c_bottom.R+lr1), lr1 );
+        CE Circle  c_l1( Vertical( lr1) & Circle( с_top.o, c_bottom.R+lr1), lr1 );
         CE Circle  c_l2 = tangent_сircle( с_top, c_l1, lr2 );
 
         CE Arc a_top = chain_arc( TE1      , с_top , c_l2     );
@@ -475,12 +458,12 @@ int test2()
         CE double s   = s_abs   / b_abs; // относительная толщина стенки трубы
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
 
-        CE Point TE1( 1.,  0.00001); // задняя кромка верх
-        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
+        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
                                      // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_lead({lr1, lr1}, lr1 );
         CE Circle  с_top = tangent_сircle( c_lead, TE1, R );
-        CE Circle  c_bottom( с_top, R-s );
+        CE Circle  c_bottom( с_top.o, R-s );
         CE Segment s_start = tangent_segment( c_lead, -c_bottom, minus );
         CE Segment s_end = tangent_segment( c_bottom, TE2 );
 
@@ -510,13 +493,13 @@ int test3()
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
         CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 1
 
-        CE Point TE1( 1.,  0.00001); // задняя кромка верх
-        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
+        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
                                      // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s );
-        CE Circle  с_top( c_bottom, R );
+        CE Circle  с_top( c_bottom.o, R );
         CE Circle  c_l2  = tangent_сircle( c_l1, с_top, lr2, minus );
         CE Segment s_end = tangent_segment( c_l1, TE2, minus );
 
@@ -545,13 +528,13 @@ int test4()
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
         CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 1
 
-        CE Point TE1( 1.,  0.00001); // задняя кромка верх
-        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
+        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
                                      // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s );
-        CE Circle  с_top( c_bottom, R );
+        CE Circle  с_top( c_bottom.o, R );
         CE Circle  c_l2  = tangent_сircle( c_l1, с_top, lr2, minus );
         CE Segment s_end0 = tangent_segment( c_l1, TE2, minus );
 
@@ -584,13 +567,13 @@ int test5()
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
         CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 1
 
-        CE Point TE1( 1.,  0.00001); // задняя кромка верх
-        CE Point TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
+        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
+        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
                                      // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s );
-        CE Circle  с_top( c_bottom, R );
+        CE Circle  с_top( c_bottom.o, R );
         CE Circle  c_l2  = tangent_сircle( c_l1, с_top, lr2, minus );
         CE Segment s_end = tangent_segment( c_bottom, TE2 );
 
@@ -669,13 +652,13 @@ int main( unsigned argc, const char *argv[])
         double ler = ler_abs / b_abs; // относительный радиус передней кромки
         double lef = lef_abs / b_abs; // относительный радиус скругл. передней кромки
 
-        CE Point TE1( 1.,  0.00001); // задняя кромка верх
-        CE Point TE2( 1., -0.00001); // задняя кромка низ, между ними зазор для соблюдения  
+        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
+        CE Vec TE2( 1., -0.00001); // задняя кромка низ, между ними зазор для соблюдения  
                                      // постулата Жуковского-Чаплыгина (Kutta condition)
         Circle  c_le   ( {ler, ler}, -ler );
         Circle  c_trail( TE1       , -s   );
         Circle  c_bottom = tangent_сircle( c_le, c_trail, R-s, minus );
-        Circle  с_top( c_bottom, R );
+        Circle  с_top( c_bottom.o, R );
         Circle  c_lef = tangent_сircle( -c_le, с_top, lef );
         Segment s_end = tangent_segment( c_bottom, TE2, minus );
 
