@@ -4,13 +4,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <clocale>
+#include <cassert>
 
 #define CE      constexpr
 #define CEstat  constexpr static
 #define CExplct constexpr explicit
 #define CEfrnd  constexpr friend
 
-CE double π = 3.14159265358979323846;
+CE const double π = 3.14159265358979323846;
 
 class Sing
 {
@@ -19,12 +20,14 @@ CE      Sing( int x): value(x) {};
 public:
 CE      operator int   () const { return  value; };
 CE      Sing operator- () const { return -value; };
-CEstat  Sing plus      ()       { return      1; };
-CEstat  Sing minus     ()       { return     -1; };
+static  const Sing plus;
+static  const Sing minus;
 };
+CE const Sing Sing::plus ( 1 );
+CE const Sing Sing::minus(-1 );
 
-CE Sing plus  = Sing::plus();
-CE Sing minus = Sing::minus();
+CE const Sing plus  = Sing::plus;
+CE const Sing minus = Sing::minus;
 
 namespace ce
 {
@@ -67,11 +70,11 @@ struct Vec
 CE      Vec(                     ): x(NAN), y(NAN) {}
 CE      Vec( double x_, double y_): x( x_), y( y_) {}
 
-CE      double  operator ~ (             ) const { return ce::sqrt( x*x + y*y );} // Длина
 CE      double  operator , ( const Vec& v) const { return  x*v.x + y*v.y  ;     } // Скалярное произведение
+CEfrnd  double  ²          ( const Vec& v)       { return  (v, v)         ;     } // Длина² (Скалярное произведение самого на себя)
 CE      Vec     operator + ( const Vec& v) const { return { x+v.x, y+v.y };     }
 CE      Vec     operator - ( const Vec& v) const { return { x-v.x, y-v.y };     }
-CEfrnd  Vec     perp       ( const Vec& v)       { return {  -v.y,   v.x };     } // поворот на 90°
+CEfrnd  Vec     L          ( const Vec& v)       { return {  -v.y,   v.x };     } // поворот на 90°
 CE      Vec     operator - (             ) const { return {-x    ,-y     };     } // поворот на 180°
 CE      Vec     operator * ( double s    ) const { return { x*s  , y*s   };     } // Умножение на скаляр
 CE      Vec     operator / ( double s    ) const { return { x/s  , y/s   };     } // Деление на скаляр
@@ -95,7 +98,7 @@ friend  std::ostream& operator<<( std::ostream &os, const Vec& v )
                 return os;
         };
 
-CEfrnd  double cos( const Vec& l, const Vec& r) { return (l, r) / (~l * ~r); }
+//CEfrnd  double cos( const Vec& l, const Vec& r) { return (l, r) / (~l * ~r); }
 
 CEfrnd  double angle( const Vec& v )
         {
@@ -109,69 +112,79 @@ CEfrnd  double angle( const Vec& v )
         }
 };
 
-struct NVec: public Vec // Нормализованный вектор
+struct NVec: public Vec // Единичный вектор
 {
 private:
-CE      NVec( double x_, double y_): Vec( x_, y_) {}
+CExplct NVec( const Vec& v ): Vec( v ) {}
 public:                                                  
-CExplct NVec( const Vec& v            ): Vec( v / ~v)   // Нормализация вектора v
-        {}                                                         
-CExplct NVec( const Vec& v, double lv ): Vec( v / lv)   // lv - длина v
-        {}
+CE      NVec( double x_, double y_): Vec( x_, y_) { /* TODO assert( (*this, *this) == 1.);*/ }
+        // нормализующий всё подряд к-тор: нормализует вектор v и ещё что дадут (norm)
+CE      NVec( const Vec& v, double* norm ): Vec( v)
+        {
+                double l = ce::sqrt((v, v));
+                *this /= l;
+                *norm /= l; 
+        }
 
-CE      double  operator ~ (              ) const { return 1.           ;} // Длина = 1
+CEfrnd  double  ²          ( const NVec& v)       { return 1.           ;} // Скалярное произведение самого на себя = 1
                                                                            // при поворотах нормализованность сохраняется
-CEfrnd  NVec    perp       ( const NVec& v)       { return {-v.y, v.x } ;} // поворот на 90°
+CEfrnd  NVec    L          ( const NVec& v)       { return {-v.y, v.x } ;} // поворот на 90°
 CE      NVec    operator - (              ) const { return {  -x,  -y } ;} // поворот на 180°
 
-CEfrnd  double cos( const NVec& l, const NVec& r) { return (l, r);         }
-CEfrnd  double cos( const  Vec& l, const NVec& r) { return (l, r) / ~l;    }
-CEfrnd  double cos( const NVec& l, const  Vec& r) { return (l, r) / ~r;    }
+//CEfrnd  double cos( const NVec& l, const NVec& r) { return (l, r);         }
+//CEfrnd  double cos( const  Vec& l, const NVec& r) { return (l, r) / ~l;    }
+//CEfrnd  double cos( const NVec& l, const  Vec& r) { return (l, r) / ~r;    }
 };
+
+CE const NVec 𝐢 = { 1., 0. }; // единичный вектор вдоль оси 𝑋
+CE const NVec 𝐣 = { 0., 1. }; // единичный вектор вдоль оси 𝑌
 
 struct Matrix2x2
 {
-        Vec s1, s2;
-CE      Matrix2x2( const Vec& v1, const Vec& v2 ): s1( v1), s2( v2) {};
-CE      Vec operator * ( const Vec& v) const { return { (s1, v), (s2, v) }; }
+        NVec s1, s2;
+CE      Matrix2x2( const NVec& v1, const NVec& v2 ): s1( v1), s2( v2) {};
+CE       Vec operator * ( const  Vec& v) const { return { (s1, v), (s2, v) }; }
+CE      NVec operator * ( const NVec& v) const { return { (s1, v), (s2, v) }; }
 };
 
 struct Line
 {
-        Vec norm;
-        double c;
+        double p;
+        NVec n;
 
-        // Конструктор прямой, заданой нормальным уравнением (𝐧, 𝐱) + 𝐶 = 0 (где 𝐱 - радиус-вектор произвольной точки прямой)
+        // Прямая, заданой нормальным уравнением (𝐧, 𝐫) + 𝐶 = 0, |𝐧| > 0
         // \param[in] 𝐧 - вектор, нормальный к прямой
-        // \param[in] 𝐶 - скалярный праметр уравнения
+        // \param[in] 𝐶 - скалярный параметр
 CE      Line( const Vec& 𝐧, double 𝐶 )
-        : norm( 𝐧 ), c( 𝐶 )
+        : p( -𝐶 ), n( 𝐧, &p )
+        {}
+        // Прямая, задана нормированным уравнением (𝐧, 𝐫) = 𝑝, |𝐧| = 1, 𝑝 ⩾ 0
+        // \param[in] 𝐧 - единичный вектор, нормальный к прямой
+        // \param[in] 𝑝 - растояние от начало координат до прямой
+CE      Line( const NVec& 𝐧, double 𝑝 )
+        : n( 𝐧 ), p( 𝑝 )
         {};
         // через точки p1 и p2
 CE      Line( const Vec& p1, const Vec& p2 )
-        : norm( perp(p2 - p1))
-        , c( -(p1, perp(p2)) )
+        : Line( L(p2 - p1), -(p1, L(p2)) )
         {};
-
-        // \return вектор, паралельный прямой
-//CEfrnd  Vec paral( const Line& l) { return perp( l.norm); }
 
 friend  std::ostream& operator<<( std::ostream &os, const Line& obj )
         {
-                //os << Vec( 0.0, -obj.c/obj.norm.y)
-                //   << Vec( -obj.c/obj.norm.x, 0.0);
+                os << Vec( 0.0, obj.p/obj.n.y)
+                   << Vec( obj.p/obj.n.x, 0.0);
                 return os;
         };
 };
 struct Vertical: public Line
 {
-        // Вертикаль пересекающая ось X в точке x0
-CE      Vertical( double x0 ): Line( {-1., 0.}, x0) {};
+        // Вертикаль пересекающая ось 𝑋 в точке x0
+CE      Vertical( double x0 ): Line( 𝐢, x0) {};
 };
 struct Horizontal: public Line
 {
-        // Горизонталь пересекающая ось Y в точке y0
-CE      Horizontal( double y0 ): Line( {0., 1.}, -y0) {};
+        // Горизонталь пересекающая ось 𝑌 в точке y0
+CE      Horizontal( double y0 ): Line( 𝐣, y0) {};
 };
 
 struct Segment: public Line
@@ -207,9 +220,9 @@ struct Circle
         // центр проходящей через две точки окружность с радиусом R
 CEstat  Vec center( const Vec& p1, const Vec& p2, double R, Sing case_)
         {
-                double d = case_ * ~( p1 - p2);
+                double d² = ²(p1 - p2);
                 //double h = sqrt( ²(R) - ²(d/2.));
-                double h_div_d = ce::sqrt( ²(R) - ²(d/2.)) / d;
+                double h_div_d = case_ * ce::sqrt( (²(R)/d² - 1./4.) );
 
                 return { (p2.x + p1.x)/2. + (p2.y - p1.y) * h_div_d
                        , (p2.y + p1.y)/2. - (p2.x - p1.x) * h_div_d
@@ -293,11 +306,10 @@ friend  std::ostream& operator<<( std::ostream &os, const Arc& arc )
 };
 
 // проекция точки (радиус-вектор 𝐫) на прямую l
-CE Vec pr( const Vec& 𝐫, const Line& l)
+CE Vec proj( const Vec& 𝐫, const Line& l)
 {
-        const double& 𝐶 = l.c;                      // параметр 𝐶 из уравнения прямой (𝐧, 𝐱) + 𝐶 = 0
-        const Vec& 𝐧 = l.norm;                      // перпедикуляр к прямой
-        return 𝐫 - 𝐧 * (((𝐫, 𝐧) + 𝐶) / (𝐧, 𝐧));     // точка проекции на прямую
+        const NVec& 𝐧 = l.n;           // перпедикуляр к прямой
+        return 𝐫 - 𝐧 * ((𝐧, 𝐫) - l.p);  // точка проекции на прямую
 }
 
 #pragma region // функции поиска пересечений
@@ -306,21 +318,17 @@ CE Vec cross( const Circle& c, const Line& l, Sing sing = plus )
         const Vec&   𝐨  = c.o;          // центр окружности
         const double 𝘳² = c.R*c.R;      // квадрат радиуса окружности
 
-        Vec 𝐬 = pr( 𝐨, l);              // точка проекции центра окружности на прямую
-        Vec 𝐬𝐨 = 𝐬 - 𝐨;
-        double 𝘩² = (𝐬𝐨, 𝐬𝐨);           // квадрат расстояния от центра окружности до прямой
-        Vec 𝐯 = perp( l.norm);          // вектор, параллельный прямой l
-        Vec 𝐯₁ = 𝐯 * (ce::sqrt( (𝘳² - 𝘩²) / (𝐯, 𝐯))); // 𝐯₁ паралелен 𝐯 но длиной √(𝘳² − 𝘩²)
+        Vec 𝐬 = proj( 𝐨, l);              // точка проекции центра окружности на прямую
+        double 𝘩² = ²(𝐬 - 𝐨);           // квадрат расстояния от центра окружности до прямой
+        NVec 𝐯 = L( l.n);               // вектор, параллельный прямой l
+        Vec 𝐯₁ = 𝐯 * ce::sqrt( 𝘳² - 𝘩²); // 𝐯₁ паралелен 𝐯 но длиной √(𝘳² − 𝘩²)
         return 𝐬 - 𝐯₁ * sing;
 }
 
 CE Vec cross( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
-        const Vec& 𝐨₁ = c1.o; // радиус-вектор центра окружности 1
-        const Vec& 𝐨₂ = c2.o; // радиус-вектор центра окружности 2
-
-        Line radical_line( (𝐨₂ - 𝐨₁) * 2. 
-                         , (𝐨₁, 𝐨₁) - (𝐨₂, 𝐨₂) + ²(c2.R) - ²(c1.R)
+        Line radical_line( (c2.o - c1.o) * 2. 
+                         , ²(c1.o) - ²(c2.o) + ²(c2.R) - ²(c1.R)
                          );
 
         return cross( c1, radical_line, -sing ); 
@@ -348,32 +356,31 @@ CE Vec operator ^ ( const Circle& c1, const Circle& c2 ) { return cross( c1, c2,
 CE Line tangent_line( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
         Vec c21 = c2.o - c1.o;
-        double l = ~c21;
-        NVec c21n( c21, l );
-        double cosθ = (c2.R - c1.R)/l; // θ - угол между линией центров и касательной
+        double cosθ = (c2.R - c1.R); // /l; // θ - угол между линией центров и касательной
+        NVec c21n( c21, &cosθ );
         double sinθ = ce::sqrt(1 - cosθ*cosθ);
 
         Matrix2x2 R( {      cosθ, -sing*sinθ }
                    , { sing*sinθ,       cosθ }
                    );
 
-        Vec cr = R * c21n;
+        NVec cr = R * c21n;
 
-        return Line( cr, c1.R - (cr, c1.o));
+        return Line( cr, (cr, c1.o) - c1.R );
 }
 
 // касательная к окружностям c1 и c2
 CE Segment tangent_segment( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
         Line tl = tangent_line( c1, c2, -sing );
-        return Segment( tl, pr( c1.o, tl ), pr( c2.o, tl ) );
+        return Segment( tl, proj( c1.o, tl ), proj( c2.o, tl ) );
 }
 
 // поиск точки касания прямой исходящей из точки p и окружности c
 CE Vec tangent_point( const Circle& c1, const Vec& p, Sing sing = plus )
 {
         Line tl = tangent_line( c1, Circle( p, 0.), sing );
-        return pr( c1.o, tl );
+        return proj( c1.o, tl );
 };
 
 // дуга радиусом R, исходящая из точки p и касательная к окружности c
@@ -421,7 +428,7 @@ int test1()
         CE Circle  с_top = tangent_сircle( c_lead, TE1, R );
         CE Circle  c_bottom( с_top.o, R-s );
         CE Segment s_end = tangent_segment( c_bottom, TE2 );
-        CE Circle  c_l1( Vertical( lr1) & Circle( с_top.o, c_bottom.R+lr1), lr1 );
+        CE Circle  c_l1( Vertical( lr1) ^ Circle( с_top.o, c_bottom.R+lr1), lr1 );
         CE Circle  c_l2 = tangent_сircle( с_top, c_l1, lr2 );
 
         CE Arc a_top = chain_arc( TE1      , с_top , c_l2     );
