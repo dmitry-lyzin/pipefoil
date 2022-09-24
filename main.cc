@@ -136,9 +136,6 @@ CE      NVec    operator - (              ) const { return {  -x,  -y } ;} // п
 //CEfrnd  double cos( const NVec& l, const  Vec& r) { return (l, r) / ~r;    }
 };
 
-CE const NVec 𝐢 = { 1., 0. }; // единичный вектор вдоль оси 𝑋
-CE const NVec 𝐣 = { 0., 1. }; // единичный вектор вдоль оси 𝑌
-
 struct Matrix2x2
 {
         NVec s1, s2;
@@ -179,12 +176,12 @@ friend  std::ostream& operator<<( std::ostream &os, const Line& obj )
 struct Vertical: public Line
 {
         // Вертикаль пересекающая ось 𝑋 в точке x0
-CE      Vertical( double x0 ): Line( 𝐢, x0) {};
+CE      Vertical( double x0 ): Line( NVec( 1., 0. ), x0) {};
 };
 struct Horizontal: public Line
 {
         // Горизонталь пересекающая ось 𝑌 в точке y0
-CE      Horizontal( double y0 ): Line( 𝐣, y0) {};
+CE      Horizontal( double y0 ): Line( NVec( 0., 1. ), y0) {};
 };
 
 struct Segment: public Line
@@ -589,7 +586,7 @@ int test5()
         CE Arc a_l1  = chain_arc( a_l2.p2 , c_l1 , c_bottom, minus );
         CE Arc a_bottom( c_bottom, a_l1.p2, s_end.p1 );
 
-        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << lr1_abs << '\n'
+        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << lr1_abs << " f" << lr2_abs << '\n'
                 << std::setprecision(5) << std::fixed
                 << a_top << a_l2 << -a_l1 << a_bottom << s_end;
 
@@ -601,10 +598,10 @@ int main( unsigned argc, const char *argv[])
 {
         static CE char *param_name[] =
         { "диаметр_трубы"
-                , "толщина_стенки_трубы"
-                , "хорда"
-                , "радиус_передней_кромки"
-                , "радиус_зализа_над_передней_кромкой"
+        , "толщина_стенки_трубы"
+        , "хорда"
+        , "радиус_передней_кромки"
+        , "радиус_зализа_над_передней_кромкой"
         };
 
         double param[ std::size( param_name)];
@@ -660,18 +657,17 @@ int main( unsigned argc, const char *argv[])
         double lef = lef_abs / b_abs; // относительный радиус скругл. передней кромки
 
         CE Vec TE1( 1.,  0.00001); // задняя кромка верх
-        CE Vec TE2( 1., -0.00001); // задняя кромка низ, между ними зазор для соблюдения  
-                                     // постулата Жуковского-Чаплыгина (Kutta condition)
+        CE Vec TE2( 1., -0.00001); // задняя кромка низ, между ними зазор для соблюдения постулата Жуковского-Чаплыгина (Kutta condition)
         Circle  c_le   ( {ler, ler}, -ler );
         Circle  c_trail( TE1       , -s   );
-        Circle  c_bottom = tangent_сircle( c_le, c_trail, R-s, minus );
+        Circle  c_bottom = tangent_сircle( c_le, c_trail, R-s );
         Circle  с_top( c_bottom.o, R );
-        Circle  c_lef = tangent_сircle( -c_le, с_top, lef );
-        Segment s_end = tangent_segment( c_bottom, TE2, minus );
+        Circle  c_lef = tangent_сircle( -c_le, с_top, lef, minus );
+        Segment s_end = tangent_segment( c_bottom, TE2 );
 
         Arc a_top = chain_arc( TE1     , с_top, c_lef    );
         Arc a_lef = chain_arc( a_top.p2, c_lef, c_le     );
-        Arc a_le  = chain_arc( a_lef.p2, c_le , c_bottom );
+        Arc a_le  = chain_arc( a_lef.p2, c_le , c_bottom, minus );
         Arc a_bottom( c_bottom, a_le.p2, s_end.p1 );
 
         std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
