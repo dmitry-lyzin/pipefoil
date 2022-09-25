@@ -13,6 +13,7 @@
 #define CEfrnd  constexpr friend
 
 ₠ const double π = 3.14159265358979323846;
+CE double operator ""π ( unsigned long long a) { return π * a; }
 
 class Sing
 {
@@ -74,6 +75,7 @@ CE      Vec(                     ): x(NAN), y(NAN) {}
 CE      Vec( double x_, double y_): x( x_), y( y_) {}
 
 CE      double  operator , ( const Vec& v) const { return  x*v.x + y*v.y  ;     } // Скалярное произведение
+CE      double  operator ^ ( const Vec& v) const { return  x*v.y - y*v.x  ;     } // Псевдоскалярное произведение
 CEfrnd  double  ²          ( const Vec& v)       { return  (v, v)         ;     } // Длина² (Скалярное произведение самого на себя)
 CEfrnd  Vec     L          ( const Vec& v)       { return {  -v.y,   v.x };     } // поворот на 90°
 CE      Vec     operator - (             ) const { return {    -x,    -y };     } // поворот на 180°
@@ -91,24 +93,24 @@ CE      Vec&    operator /=( double s    ) { x /= s, y /= s; return *this;  } //
 CE      bool    operator ==( const Vec& v) const { return eq( x, v.x) && eq( y, v.y);   }
 CE      bool    operator !=( const Vec& v) const { return !(*this == v);                }
 
-friend  std::ostream& operator<<( std::ostream &os, const Vec& v )
+friend  std::ostream& operator<<( std::ostream &os, const Vec& _ )
         {
                 static Vec last;
-                if( last != v )
+                if( last != _ )
                 {
-                        os << std::setw(8) << v.x << std::setw(12) << v.y << '\n';
-                        last = v;
+                        os << std::setw(8) <<_.x << std::setw(12) <<_.y << '\n';
+                        last = _;
                 }
                 return os;
         };
 
-CEfrnd  double angle( const Vec& v )
+CEfrnd  double angle( const Vec& v̅ )
         {
-                if( v.x > +0. ) return atan( v.y / v.x );
-                if( v.x < -0. ) return atan( v.y / v.x ) + π;
+                if( v̅.x > +0. ) return atan( v̅.y / v̅.x );
+                if( v̅.x < -0. ) return atan( v̅.y / v̅.x ) + π;
 
-                if( v.y > +0. ) return π/2;
-                if( v.y < -0. ) return π*3/2;
+                if( v̅.y > +0. ) return π/2;
+                if( v̅.y < -0. ) return 3π/2;
 
                 return NAN;
         }
@@ -125,62 +127,71 @@ CExplct NVec( const Vec& v        ): Vec( v     ) {}
 CE      NVec( double x_, double y_): Vec( x_, y_) {}
 
 public:                                                  
-        // нормализующий всё подряд к-тор: нормализует вектор v и ещё что дадут (*p)
-CE      NVec( const Vec& v, double* p ): Vec( v)
+CE      NVec( double θ                ): Vec( cos(θ), sin(θ)) {}
+        // нормализующий всё подряд к-тор: нормализует вектор v̅ и ещё что дадут (*p)
+CE      NVec( const Vec& v̅, double *p ): Vec( v̅)
         {
-                double l = ce::sqrt((v, v));
+                double l = ce::sqrt((v̅, v̅));
                 *this /= l;
                 *p    /= l; 
         }
-CE      NVec( double θ                ): Vec( cos(θ), sin(θ)) {}
 
 CEfrnd  double  ²          ( const NVec& v)       { return 1.           ;} // Скалярное произведение самого на себя = 1
                                                                            // при поворотах нормализованность сохраняется
 CEfrnd  NVec    L          ( const NVec& v)       { return {-v.y, v.x } ;} // поворот на 90°
 CE      NVec    operator - (              ) const { return {  -x,  -y } ;} // поворот на 180°
 
-static const NVec 𝐢;
-static const NVec 𝐣;
+static const NVec i;
+static const NVec j;
 };
 
-CE const NVec NVec::𝐢 = { 1., 0. }; // единичный вектор вдоль оси 𝑋
-CE const NVec NVec::𝐣 = { 0., 1. }; // единичный вектор вдоль оси 𝑌
+CE const NVec NVec::i = { 1., 0. }; // единичный вектор вдоль оси 𝑋
+CE const NVec NVec::j = { 0., 1. }; // единичный вектор вдоль оси 𝑌
 
 // Матрица поворота
 class Rot
 {
-        NVec s1, s2;
+        NVec v̅1, v̅2;
 
-CE      Rot( double cos, double sin ): s1( cos, -sin), s2( sin, cos) {};
+CE      Rot( double cos, double sin ): v̅1( cos, -sin), v̅2( sin, cos) {};
 public:
 CE      Rot( double cos, Sing sing  ): Rot( cos   , sing * ce::sqrt( 1 - cos*cos) ) {};
 CE      Rot( double θ               ): Rot( cos(θ), sin(θ)                        ) {};
 
-CE       Vec operator * ( const  Vec& v ) const { return { (s1,v), (s2,v) }; }
-CE      NVec operator * ( const NVec& v ) const { return { (s1,v), (s2,v) }; }
+CE       Vec operator * ( const  Vec& v̅ ) const { return { (v̅1, v̅), (v̅2, v̅) }; }
+CE      NVec operator * ( const NVec& v̅ ) const { return { (v̅1, v̅), (v̅2, v̅) }; }
 };
 
 struct Line
 {
-        double p;
-        NVec n;
+        double p; // растояние от начало координат до прямой
+        NVec   n̅; // единичный (|n̅| = 1) перпедикуляр к прямой
 
-        // Прямая, заданой нормальным уравнением (𝐧, 𝐫) + 𝐶 = 0, |𝐧| > 0
-        // \param[in] 𝐧 - вектор, нормальный к прямой
+        // Прямая, заданой нормальным уравнением (n̅, r̅) + 𝐶 = 0, |n̅| > 0
+        // \param[in] n̅ - вектор, нормальный к прямой
         // \param[in] 𝐶 - скалярный параметр
-CE      Line( const Vec& 𝐧, double 𝐶 )
-        : p( -𝐶 ), n( 𝐧, &p )
+CE      Line( const Vec& n̅, double 𝐶 )
+        : p( -𝐶 ), n̅( n̅, &p )
         {}
-        // Прямая, задана нормированным уравнением (𝐧, 𝐫) = 𝑝, |𝐧| = 1, 𝑝 ⩾ 0
-        // \param[in] 𝐧 - единичный вектор, нормальный к прямой
+        // Прямая, задана нормированным уравнением (n̅, r̅) = 𝑝, |n̅| = 1, 𝑝 ⩾ 0
+        // \param[in] n̅ - единичный вектор, нормальный к прямой
         // \param[in] 𝑝 - растояние от начало координат до прямой
-CE      Line( const NVec& 𝐧, double 𝑝 )
-        : n( 𝐧 ), p( 𝑝 )
+CE      Line( const NVec& n̅, double 𝑝 )
+        : n̅( n̅ ), p( 𝑝 )
         {};
-        // через точки p1 и p2
-CE      Line( const Vec& p1, const Vec& p2 )
-        : Line( L(p2 - p1), -(p1, L(p2)) )
+        // Прямая через точки a̅ и b̅
+CE      Line( const Vec& a̅, const Vec& b̅ )
+        : Line( L(b̅ - a̅), a̅ ^ b̅ )
         {};
+
+        //(l.p - (l.n̅, r̅)) // растояние между r̅ и l
+
+        // проекция точки r̅ на прямую l
+CEfrnd  Vec operator >>( const Vec& r̅, const Line& _)
+        {
+                return r̅ -_.n̅ * ((_.n̅, r̅) -_.p);
+        }
+
 /*
 friend  std::ostream& operator<<( std::ostream &os, const Line& obj )
         {
@@ -193,43 +204,43 @@ friend  std::ostream& operator<<( std::ostream &os, const Line& obj )
 struct Vertical: public Line
 {
         // Вертикаль пересекающая ось 𝑋 в точке x0
-CE      Vertical( double x0 ): Line( NVec::𝐢, x0) {};
+CE      Vertical( double x0 ): Line( NVec::i, x0) {};
 };
 struct Horizontal: public Line
 {
         // Горизонталь пересекающая ось 𝑌 в точке y0
-CE      Horizontal( double y0 ): Line( NVec::𝐣, y0) {};
+CE      Horizontal( double y0 ): Line( NVec::j, y0) {};
 };
 
 struct Segment: public Line
 {
-        Vec p1, p2;
+        Vec p̅1, p̅2;
 
 CE      Segment( const Vec& p1_, const Vec& p2_ )
         : Line( p1_, p2_ )
-        , p1( p1_), p2( p2_)
+        , p̅1( p1_), p̅2( p2_)
         {};
 
         // TODO стремный конст-ор, как бы его спрятать
 CE      Segment( const Line& l, const Vec& p1_, const Vec& p2_ )
         : Line( l )
-        , p1( p1_), p2( p2_)
+        , p̅1( p1_), p̅2( p2_)
         {};
 
         // обмен концов (рисоваться будет в другую сторону)
-CE      Segment operator - () const { return Segment( this->p2, this->p1 ); }
+CE      Segment operator - () const { return Segment( this->p̅2, this->p̅1 ); }
 
-friend  std::ostream& operator<<( std::ostream &os, const Segment& obj )
+friend  std::ostream& operator<<( std::ostream &os, const Segment& _ )
         {
-                os << obj.p1 << obj.p2;
+                os <<_.p̅1 <<_.p̅2;
                 return os;
         };
 };
 
 struct Circle
 {
-        Vec o;
-        double R;
+        Vec    o̅; // центр окружности
+        double R; // радиус окружности
 /*
         // центр проходящей через две точки окружность с радиусом R
 CEstat  Vec center( const Vec& p1, const Vec& p2, double R, Sing case_)
@@ -248,11 +259,8 @@ CE      Circle( const Vec& p1, const Vec& p2, double R_, Sing case_)
         {};
 */
 
-CE      Circle( const Vec& center, double R_ )
-        : R( R_), o( center )
-        {};
-CE      Circle( const Vec& center            )
-        : R( 0.), o( center )
+CE      Circle( const Vec& center, double radius = 0. )
+        : R( radius), o̅( center )
         {};
 
 CE      Circle operator - () const
@@ -264,40 +272,40 @@ CE      Circle operator - () const
 
         void print( std::ostream &os, double α1, double α2 ) const
         {
-                // вычисляем кол. сегментов
-                // на круг - 160 сегментов, примерно
-                int segments = static_cast< int>( round( abs( (α2 - α1) / (2.* π) * 160)));
-                
-                Rot 𝑅 = (α2 - α1) / segments;
-                Vec v̅ = NVec( α1) * abs( R);
-                Vec d̅ = 𝑅*v̅ - v̅;
-                v̅ += o;
+                double Δα = α2 - α1; // угол поворота
+                // кол. сегментов, на круг - 160 сегментов, примерно
+                int segments = static_cast< int>( round( abs( Δα / 2π * 160)));
+
+                Rot M = Δα / segments;          // матрица поворота на угол Δα/segments
+                Vec r̅ = NVec( α1) * abs( R);    // радиус от центра окружности
+                Vec s̅ = M*r̅ - r̅;                // сегментик, которым рисуем окружность
+                r̅ += o̅;
                 for( ; segments >= 0; --segments )
                 {
-                        os << v̅;
-                        v̅ += d̅;
-                        d̅ = 𝑅 * d̅;
+                        os << r̅;
+                        r̅ += s̅;
+                        s̅ = M*s̅;
                 }
         };
-friend  std::ostream& operator<<( std::ostream &os, const Circle& c )
+friend  std::ostream& operator<<( std::ostream &os, const Circle& _ )
         {
-                c.print( os, 0., 2.*π );
+                _.print( os, 0, 2π );
                 return os;
         };
 };
 
 struct Arc: public Circle
 {
-        Vec p1, p2;
+        Vec p̅1, p̅2;
         
 CE      Arc( const Circle& circle, const Vec& start, const Vec& finish )
         : Circle( circle)
-        , p1( start), p2( finish)
+        , p̅1( start), p̅2( finish)
         {};
 
 CE      Arc( const Vec& center, double R_, const Vec& start, const Vec& finish )
         : Circle( center, R_ )
-        , p1( start), p2( finish)
+        , p̅1( start), p̅2( finish)
         {};
 
         // сменить сектор откружности
@@ -308,46 +316,37 @@ CE      Arc operator - () const
                 return a;
         }
 
-friend  std::ostream& operator<<( std::ostream &os, const Arc& arc )
+friend  std::ostream& operator<<( std::ostream &os, const Arc& _ )
         {
-                double a1 = angle( arc.p1 - arc.o );
-                double a2 = angle( arc.p2 - arc.o );
+                double α1 = angle( _.p̅1 - _.o̅ );
+                double α2 = angle( _.p̅2 - _.o̅ );
 
-                if( arc.R < 0. )
+                if( _.R < 0. )
                 {
-                        if( a1 >= a2) a2 += 2.* π;
-                        else          a1 += 2.* π;
+                        if( α1 >= α2) α2 += 2π;
+                        else          α1 += 2π;
                 }
 
-                arc.print( os, a1, a2 );
+                _.print( os, α1, α2 );
                 return os;
         };
 };
 
-// проекция точки (радиус-вектор 𝐫) на прямую l
-CE Vec proj( const Vec& 𝐫, const Line& l)
-{
-        const NVec& 𝐧 = l.n;           // перпедикуляр к прямой
-        return 𝐫 - 𝐧 * ((𝐧, 𝐫) - l.p);  // точка проекции на прямую
-}
-
 #pragma region // функции поиска пересечений
 CE Vec cross( const Circle& c, const Line& l, Sing sing = plus )
 {
-        const Vec&   𝐨  = c.o;          // центр окружности
-        const double 𝘳² = c.R*c.R;      // квадрат радиуса окружности
-
-        Vec 𝐬 = proj( 𝐨, l);              // точка проекции центра окружности на прямую
-        double 𝘩² = ²(𝐬 - 𝐨);           // квадрат расстояния от центра окружности до прямой
-        NVec 𝐯 = L( l.n);               // вектор, параллельный прямой l
-        Vec 𝐯₁ = 𝐯 * ce::sqrt( 𝘳² - 𝘩²); // 𝐯₁ паралелен 𝐯 но длиной √(𝘳² − 𝘩²)
-        return 𝐬 - 𝐯₁ * sing;
+        const double 𝘳² = c.R*c.R;      // квадрат радиуса окружности       
+        Vec p̅ = c.o̅ >> l;               // точка проекции центра окружности на прямую
+        double 𝘩² = ²(p̅ - c.o̅);         // квадрат расстояния от центра окружности до прямой
+        NVec v̅ = L( l.n̅);               // вектор, параллельный прямой l
+        Vec v̅₁ = v̅ * ce::sqrt( 𝘳² - 𝘩²);// v̅₁ сонаправлен v̅ но длиной √(𝘳² − 𝘩²)
+        return p̅ - v̅₁ * sing;
 }
 
 CE Vec cross( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
-        Line radical_line( (c2.o - c1.o) * 2. 
-                         , ²(c1.o) - ²(c2.o) + ²(c2.R) - ²(c1.R)
+        Line radical_line( (c2.o̅ - c1.o̅) * 2. 
+                         , ²(c1.o̅) - ²(c2.o̅) + ²(c2.R) - ²(c1.R)
                          );
 
         return cross( c1, radical_line, -sing ); 
@@ -374,38 +373,38 @@ CE Vec operator ^ ( const Circle& c1, const Circle& c2 ) { return cross( c1, c2,
 // касательная к окружностям c1 и c2
 CE Line tangent_line( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
-        Vec c21 = c2.o - c1.o;
+        Vec c̅ = c2.o̅ - c1.o̅;
         double cosθ = c2.R - c1.R;              // θ - угол между линией центров и касательной
-        NVec c21n( c21, &cosθ );                // нормализовать c21 и заодно cosθ
-        NVec c21r = Rot( cosθ, sing) * c21n;    // повернуть c21n на θ в направлении sing
-        return Line( c21r, (c21r, c1.o) - c1.R ); // TODO тут где-то баг... c21r ∥ касат., а должен быть ⊥
+        NVec n̅( c̅, &cosθ );                     // нормализовать c̅ в n̅ и заодно cosθ
+        NVec r̅ = Rot( cosθ, sing) * n̅;          // повернуть n̅ на θ в направлении sing
+        return Line( r̅, (r̅, c1.o̅) - c1.R );     // TODO тут где-то баг... r̅ ∥ касат., а должен быть ⊥
 }
 
 // касательная к окружностям c1 и c2
 CE Segment tangent_segment( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
         Line tl = tangent_line( c1, c2, -sing );
-        return Segment( tl, proj( c1.o, tl ), proj( c2.o, tl ) );
+        return Segment( tl, c1.o̅ >> tl, c2.o̅ >> tl );
 }
 
 // поиск точки касания прямой исходящей из точки p и окружности c
 CE Vec tangent_point( const Circle& c1, const Vec& p, Sing sing = plus )
 {
         Line tl = tangent_line( c1, Circle( p, 0.), sing );
-        return proj( c1.o, tl );
+        return c1.o̅ >> tl;
 };
 
 // дуга радиусом R, исходящая из точки p и касательная к окружности c
 CE Arc tangent_arc( const Circle& c, const Vec& p, double R, Sing sing = plus )
 {
-        Vec center = cross( Circle( p, R), Circle( c.o, R-c.R), sing );
-        return Arc( center, R, p, cross( c, Line(c.o, center), -sing) );
+        Vec center = cross( Circle( p, R), Circle( c.o̅, R-c.R), sing );
+        return Arc( center, R, p, cross( c, Line(c.o̅, center), -sing) );
 }
 
 // окруж. радиусом R, касательная к окружностям c1 и c2
 CE Circle tangent_сircle( const Circle& c1, const Circle& c2, double R, Sing sing = plus )
 {
-        Vec center = cross( Circle( c1.o, R-c1.R), Circle( c2.o, R-c2.R), -sing );
+        Vec center = cross( Circle( c1.o̅, R-c1.R), Circle( c2.o̅, R-c2.R), -sing );
         return Circle( center, R );
 }
 #pragma endregion
@@ -413,7 +412,7 @@ CE Circle tangent_сircle( const Circle& c1, const Circle& c2, double R, Sing si
 // очередная дуга из цепочки соприкасающихся окружностей
 CE Arc chain_arc( const Vec& prev_arc_end, const Circle& current, const Circle& next, Sing sing = plus )
 {
-        return Arc( current, prev_arc_end, cross( next, Line( next.o, current.o), -sing) );
+        return Arc( current, prev_arc_end, cross( next, Line( next.o̅, current.o̅), -sing) );
 }
 
 #ifndef NDEBUG
@@ -438,15 +437,15 @@ int test1()
                                      // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_lead({0, s½}, s½ );
         CE Circle  с_top = tangent_сircle( c_lead, TE1, R );
-        CE Circle  c_bottom( с_top.o, R-s );
+        CE Circle  c_bottom( с_top.o̅, R-s );
         CE Segment s_end = tangent_segment( c_bottom, TE2 );
-        CE Circle  c_l1( Vertical( lr1) ^ Circle( с_top.o, c_bottom.R+lr1), lr1 );
+        CE Circle  c_l1( Vertical( lr1) ^ Circle( с_top.o̅, c_bottom.R+lr1), lr1 );
         CE Circle  c_l2 = tangent_сircle( с_top, c_l1, lr2 );
 
         CE Arc a_top = chain_arc( TE1      , с_top , c_l2     );
-        CE Arc a_l2  = chain_arc( a_top.p2 , c_l2  , c_l1     );
-        CE Arc a_l1  = chain_arc( a_l2.p2  , c_l1  , c_bottom, minus );
-        CE Arc a_bottom( c_bottom, a_l1.p2, s_end.p1 );
+        CE Arc a_l2  = chain_arc( a_top.p̅2 , c_l2  , c_l1     );
+        CE Arc a_l1  = chain_arc( a_l2.p̅2  , c_l1  , c_bottom, minus );
+        CE Arc a_bottom( c_bottom, a_l1.p̅2, s_end.p̅1 );
 
         std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
                 << std::setprecision(5) << std::fixed
@@ -482,13 +481,13 @@ int test2()
                                      // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_lead({lr1, lr1}, lr1 );
         CE Circle  с_top = tangent_сircle( c_lead, TE1, R );
-        CE Circle  c_bottom( с_top.o, R-s );
+        CE Circle  c_bottom( с_top.o̅, R-s );
         CE Segment s_start = tangent_segment( c_lead, -c_bottom, minus );
         CE Segment s_end = tangent_segment( c_bottom, TE2 );
 
         CE Arc a_top = chain_arc( TE1, с_top, c_lead      );
-        CE Arc a_lead  ( c_lead  , a_top.p2  , s_start.p1 );
-        CE Arc a_bottom( c_bottom, s_start.p2, s_end.p1   );
+        CE Arc a_lead  ( c_lead  , a_top.p̅2  , s_start.p̅1 );
+        CE Arc a_bottom( c_bottom, s_start.p̅2, s_end.p̅1   );
 
         std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
                 << std::setprecision(5) << std::fixed
@@ -518,13 +517,13 @@ int test3()
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s );
-        CE Circle  с_top( c_bottom.o, R );
+        CE Circle  с_top( c_bottom.o̅, R );
         CE Circle  c_l2  = tangent_сircle( c_l1, с_top, lr2, minus );
         CE Segment s_end = tangent_segment( c_l1, TE2, minus );
 
         CE Arc a_top = chain_arc( TE1     , с_top, c_l2 );
-        CE Arc a_l2  = chain_arc( a_top.p2, c_l2 , c_l1 );
-        CE Arc a_l1( c_l1, a_l2.p2, s_end.p1 );
+        CE Arc a_l2  = chain_arc( a_top.p̅2, c_l2 , c_l1 );
+        CE Arc a_l1( c_l1, a_l2.p̅2, s_end.p̅1 );
 
         std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
                 << std::setprecision(5) << std::fixed
@@ -553,17 +552,17 @@ int test4()
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s );
-        CE Circle  с_top( c_bottom.o, R );
+        CE Circle  с_top( c_bottom.o̅, R );
         CE Circle  c_l2  = tangent_сircle( c_l1, с_top, lr2, minus );
         CE Segment s_end0 = tangent_segment( c_l1, TE2, minus );
 
         CE Arc a_top = chain_arc( TE1     , с_top, c_l2 );
-        CE Arc a_l2  = chain_arc( a_top.p2, c_l2 , c_l1 );
-        CE Arc a_l1( c_l1, a_l2.p2, s_end0.p1 );
+        CE Arc a_l2  = chain_arc( a_top.p̅2, c_l2 , c_l1 );
+        CE Arc a_l1( c_l1, a_l2.p̅2, s_end0.p̅1 );
 
-        CE Segment s_start( s_end0.p1, s_end0 ^ c_bottom );
+        CE Segment s_start( s_end0.p̅1, s_end0 ^ c_bottom );
         CE Segment s_end( s_end0 & c_bottom, TE2 );
-        CE Arc a_bottom( c_bottom, s_start.p2, s_end.p1 );
+        CE Arc a_bottom( c_bottom, s_start.p̅2, s_end.p̅1 );
 
         std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
                 << std::setprecision(5) << std::fixed
@@ -592,14 +591,14 @@ int test5()
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s );
-        CE Circle  с_top( c_bottom.o, R );
+        CE Circle  с_top( c_bottom.o̅, R );
         CE Circle  c_l2  = tangent_сircle( c_l1, с_top, lr2, minus );
         CE Segment s_end = tangent_segment( c_bottom, TE2 );
 
         CE Arc a_top = chain_arc( TE1     , с_top, c_l2     );
-        CE Arc a_l2  = chain_arc( a_top.p2, c_l2 , c_l1     );
-        CE Arc a_l1  = chain_arc( a_l2.p2 , c_l1 , c_bottom, minus );
-        CE Arc a_bottom( c_bottom, a_l1.p2, s_end.p1 );
+        CE Arc a_l2  = chain_arc( a_top.p̅2, c_l2 , c_l1     );
+        CE Arc a_l1  = chain_arc( a_l2.p̅2 , c_l1 , c_bottom, minus );
+        CE Arc a_bottom( c_bottom, a_l1.p̅2, s_end.p̅1 );
 
         std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << lr1_abs << " f" << lr2_abs << '\n'
                 << std::setprecision(5) << std::fixed
@@ -676,14 +675,14 @@ int main( unsigned argc, const char *argv[])
         Circle  c_le   ( {ler, ler}, -ler );
         Circle  c_trail( TE1       , -s   );
         Circle  c_bottom = tangent_сircle( c_le, c_trail, R-s );
-        Circle  с_top( c_bottom.o, R );
+        Circle  с_top( c_bottom.o̅, R );
         Circle  c_lef = tangent_сircle( -c_le, с_top, lef, minus );
         Segment s_end = tangent_segment( c_bottom, TE2 );
 
         Arc a_top = chain_arc( TE1     , с_top, c_lef    );
-        Arc a_lef = chain_arc( a_top.p2, c_lef, c_le     );
-        Arc a_le  = chain_arc( a_lef.p2, c_le , c_bottom, minus );
-        Arc a_bottom( c_bottom, a_le.p2, s_end.p1 );
+        Arc a_lef = chain_arc( a_top.p̅2, c_lef, c_le     );
+        Arc a_le  = chain_arc( a_lef.p̅2, c_le , c_bottom, minus );
+        Arc a_bottom( c_bottom, a_le.p̅2, s_end.p̅1 );
 
         std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
                   << std::setprecision(5) << std::fixed
