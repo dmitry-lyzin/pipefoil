@@ -12,7 +12,10 @@
 #define CExplct constexpr explicit
 #define CEfrnd  constexpr friend
 
-₠ const double π = 3.14159265358979323846;
+// epsilon ≠ std::numeric_limits< double>::epsilon();
+CE const double ε = 1e-14;
+
+CE const double π = 3.14159265358979323846;
 CE double operator ""π ( unsigned long long a) { return π * a; }
 
 class Sing
@@ -63,7 +66,7 @@ CE inline bool eq( double a, double b)
 {
         if( (a -= b) < 0 )
                 a = -a;
-        return a < 1e-14; // std::numeric_limits< double>::epsilon() ?
+        return a < ε;
 }
 
 class Vec
@@ -75,7 +78,7 @@ CE      Vec(                     ): x(NAN), y(NAN) {}
 CE      Vec( double x_, double y_): x( x_), y( y_) {}
 
 CE      double  operator , ( const Vec& v) const { return  x*v.x + y*v.y  ;     } // Скалярное произведение
-CE      double  operator ^ ( const Vec& v) const { return  x*v.y - y*v.x  ;     } // Псевдоскалярное произведение
+CE      double  operator ^ ( const Vec& v) const { return  x*v.y - y*v.x  ;     } // Псевдоскалярное (косое) произведение
 CEfrnd  double  ²          ( const Vec& v)       { return  (v, v)         ;     } // Длина² (Скалярное произведение самого на себя)
 CEfrnd  Vec     L          ( const Vec& v)       { return {  -v.y,   v.x };     } // поворот на 90°
 CE      Vec     operator - (             ) const { return {    -x,    -y };     } // поворот на 180°
@@ -118,78 +121,83 @@ CEfrnd  double angle( const Vec& v̅ )
 
 class Rot;
 
-// Единичный вектор
-class NVec: public Vec
+// Единичный вектор (unit vector)
+class UVec: public Vec
 {
         friend class Rot;
 
-CExplct NVec( const Vec& v        ): Vec( v     ) {}
-CE      NVec( double x_, double y_): Vec( x_, y_) {}
+CE      UVec( const Vec& v      ): Vec( v    ) {}
+CE      UVec( double x, double y): Vec( x, y ) {}
 
 public:                                                  
-CE      NVec( double θ                ): Vec( cos(θ), sin(θ)) {}
+CE      UVec( double θ                ): Vec( cos(θ), sin(θ)) {}
         // нормализующий всё подряд к-тор: нормализует вектор v̅ и ещё что дадут (*p)
-CE      NVec( const Vec& v̅, double *p ): Vec( v̅)
+CE      UVec( const Vec& v̅, double *p ): Vec( v̅)
         {
                 double l = ce::sqrt((v̅, v̅));
                 *this /= l;
                 *p    /= l; 
         }
 
-CEfrnd  double  ²          ( const NVec& v)       { return 1.           ;} // Скалярное произведение самого на себя = 1
+CEfrnd  double  ²          ( const UVec& v)       { return 1.           ;} // Скалярное произведение самого на себя = 1
                                                                            // при поворотах нормализованность сохраняется
-CEfrnd  NVec    L          ( const NVec& v)       { return {-v.y, v.x } ;} // поворот на 90°
-CE      NVec    operator - (              ) const { return {  -x,  -y } ;} // поворот на 180°
+CEfrnd  UVec    L          ( const UVec& v)       { return {-v.y, v.x } ;} // поворот на 90°
+CE      UVec    operator - (              ) const { return {  -x,  -y } ;} // поворот на 180°
 
-static const NVec i;
-static const NVec j;
+static const UVec î;
+static const UVec ĵ;
 };
 
-CE const NVec NVec::i = { 1., 0. }; // единичный вектор вдоль оси 𝑋
-CE const NVec NVec::j = { 0., 1. }; // единичный вектор вдоль оси 𝑌
+CE const UVec UVec::î = { 1., 0. }; // единичный вектор вдоль оси 𝑋
+CE const UVec UVec::ĵ = { 0., 1. }; // единичный вектор вдоль оси 𝑌
 
 // Матрица поворота
 class Rot
 {
-        NVec v̅1, v̅2;
+        UVec û1, û2;
 
-CE      Rot( double cos, double sin ): v̅1( cos, -sin), v̅2( sin, cos) {};
+CE      Rot( double cos, double sin ): û1( cos, -sin), û2( sin, cos) {};
 public:
 CE      Rot( double cos, Sing sing  ): Rot( cos   , sing * ce::sqrt( 1 - cos*cos) ) {};
 CE      Rot( double θ               ): Rot( cos(θ), sin(θ)                        ) {};
 
-CE       Vec operator * ( const  Vec& v̅ ) const { return { (v̅1, v̅), (v̅2, v̅) }; }
-CE      NVec operator * ( const NVec& v̅ ) const { return { (v̅1, v̅), (v̅2, v̅) }; }
+CE       Vec operator * ( const  Vec& v̅ ) const { return { (û1, v̅), (û2, v̅) }; }
+CE      UVec operator * ( const UVec& û ) const { return { (û1, û), (û2, û) }; }
 };
 
 struct Line
 {
         double p; // растояние от начало координат до прямой
-        NVec   n̅; // единичный (|n̅| = 1) перпедикуляр к прямой
+        UVec   n̂; // единичный (|n̂| = 1) перпедикуляр к прямой
 
         // Прямая, заданой нормальным уравнением (n̅, r̅) + 𝐶 = 0, |n̅| > 0
         // \param[in] n̅ - вектор, нормальный к прямой
         // \param[in] 𝐶 - скалярный параметр
 CE      Line( const Vec& n̅, double 𝐶 )
-        : p( -𝐶 ), n̅( n̅, &p )
+        : p( -𝐶 ), n̂( n̅, &p )
         {}
-        // Прямая, задана нормированным уравнением (n̅, r̅) = 𝑝, |n̅| = 1, 𝑝 ⩾ 0
-        // \param[in] n̅ - единичный вектор, нормальный к прямой
+        // Прямая, задана нормированным уравнением (n̂, r̅) = 𝑝, |n̂| = 1, 𝑝 ⩾ 0
+        // \param[in] n̂ - единичный вектор, нормальный к прямой
         // \param[in] 𝑝 - растояние от начало координат до прямой
-CE      Line( const NVec& n̅, double 𝑝 )
-        : n̅( n̅ ), p( 𝑝 )
+CE      Line( const UVec& n̂, double 𝑝 )
+        : n̂( n̂ ), p( 𝑝 )
         {};
         // Прямая через точки a̅ и b̅
 CE      Line( const Vec& a̅, const Vec& b̅ )
         : Line( L(b̅ - a̅), a̅ ^ b̅ )
         {};
 
-        //(l.p - (l.n̅, r̅)) // растояние между r̅ и l
+        // растояние между прямой и точкой r̅
+CE      double distance( const Vec& r̅) const   { return (n̂, r̅) - p; }
+        // растояние между точкой r̅ и прямой l
+CEfrnd  double ρ( const Vec& r̅, const Line& l) { return l.distance( r̅); }
+        // растояние между прямой l и точкой r̅
+//CEfrnd  double ρ( const Line& l, const Vec& r̅) { return l.distance( r̅); }
 
         // проекция точки r̅ на прямую l
-CEfrnd  Vec operator >>( const Vec& r̅, const Line& _)
+CEfrnd  Vec operator >>( const Vec& r̅, const Line& l)
         {
-                return r̅ -_.n̅ * ((_.n̅, r̅) -_.p);
+                return r̅ - l.n̂ * ρ( r̅, l);
         }
 
 /*
@@ -204,12 +212,12 @@ friend  std::ostream& operator<<( std::ostream &os, const Line& obj )
 struct Vertical: public Line
 {
         // Вертикаль пересекающая ось 𝑋 в точке x0
-CE      Vertical( double x0 ): Line( NVec::i, x0) {};
+CE      Vertical( double x0 ): Line( UVec::î, x0) {};
 };
 struct Horizontal: public Line
 {
         // Горизонталь пересекающая ось 𝑌 в точке y0
-CE      Horizontal( double y0 ): Line( NVec::j, y0) {};
+CE      Horizontal( double y0 ): Line( UVec::ĵ, y0) {};
 };
 
 struct Segment: public Line
@@ -277,7 +285,7 @@ CE      Circle operator - () const
                 int segments = static_cast< int>( round( abs( Δα / 2π * 160)));
 
                 Rot M = Δα / segments;          // матрица поворота на угол Δα/segments
-                Vec r̅ = NVec( α1) * abs( R);    // радиус от центра окружности
+                Vec r̅ = UVec( α1) * abs( R);    // радиус от центра окружности
                 Vec s̅ = M*r̅ - r̅;                // сегментик, которым рисуем окружность
                 r̅ += o̅;
                 for( ; segments >= 0; --segments )
@@ -335,12 +343,11 @@ friend  std::ostream& operator<<( std::ostream &os, const Arc& _ )
 #pragma region // функции поиска пересечений
 CE Vec cross( const Circle& c, const Line& l, Sing sing = plus )
 {
-        const double 𝘳² = c.R*c.R;      // квадрат радиуса окружности       
-        Vec p̅ = c.o̅ >> l;               // точка проекции центра окружности на прямую
-        double 𝘩² = ²(p̅ - c.o̅);         // квадрат расстояния от центра окружности до прямой
-        NVec v̅ = L( l.n̅);               // вектор, параллельный прямой l
-        Vec v̅₁ = v̅ * ce::sqrt( 𝘳² - 𝘩²);// v̅₁ сонаправлен v̅ но длиной √(𝘳² − 𝘩²)
-        return p̅ - v̅₁ * sing;
+        double h = ρ( c.o̅, l);                  // расстояние от центра окружности до прямой
+        Vec    p̅ = c.o̅ - l.n̂ * h;               // точка проекции центра окружности на прямую
+        UVec   û = L( l.n̂);                     // направляющий вектор прямой l
+        Vec    v̅ = û * ce::sqrt(²(c.R) - ²(h)); // v̅ сонаправлен û но длиной √(𝘳² − 𝘩²)
+        return p̅ - v̅ * sing;
 }
 
 CE Vec cross( const Circle& c1, const Circle& c2, Sing sing = plus )
@@ -375,9 +382,9 @@ CE Line tangent_line( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
         Vec c̅ = c2.o̅ - c1.o̅;
         double cosθ = c2.R - c1.R;              // θ - угол между линией центров и касательной
-        NVec n̅( c̅, &cosθ );                     // нормализовать c̅ в n̅ и заодно cosθ
-        NVec r̅ = Rot( cosθ, sing) * n̅;          // повернуть n̅ на θ в направлении sing
-        return Line( r̅, (r̅, c1.o̅) - c1.R );     // TODO тут где-то баг... r̅ ∥ касат., а должен быть ⊥
+        UVec n̂( c̅, &cosθ );                     // смаштабировать c̅ в n̂ и заодно cosθ
+        UVec r̂ = Rot( cosθ, sing) * n̂;          // повернуть n̂ на θ в направлении sing
+        return Line( r̂, (r̂, c1.o̅) - c1.R );     // TODO тут где-то баг... r̅ ∥ касат., а должен быть ⊥
 }
 
 // касательная к окружностям c1 и c2
@@ -415,11 +422,14 @@ CE Arc chain_arc( const Vec& prev_arc_end, const Circle& current, const Circle& 
         return Arc( current, prev_arc_end, cross( next, Line( next.o̅, current.o̅), -sing) );
 }
 
+// зазор для соблюдения постулата Жуковского-Чаплыгина (Kutta condition)
+CE const Vec TE1( 1.,  0.00001); // задняя кромка верх
+CE const Vec TE2( 1., -0.00001); // задняя кромка низ
+
 #ifndef NDEBUG
 int test1()
 {
         // профиль со скруглением сверху носка
-
         CE double b_abs   =  40.0; // хорда профиля
         CE double D_abs   = 110.0; // диаметр трубы
         CE double s_abs   =   2.7; // толщина стенки трубы
@@ -432,9 +442,6 @@ int test1()
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
         CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 2
 
-        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
-        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
-                                     // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_lead({0, s½}, s½ );
         CE Circle  с_top = tangent_сircle( c_lead, TE1, R );
         CE Circle  c_bottom( с_top.o̅, R-s );
@@ -476,9 +483,6 @@ int test2()
         CE double s   = s_abs   / b_abs; // относительная толщина стенки трубы
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
 
-        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
-        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
-                                     // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_lead({lr1, lr1}, lr1 );
         CE Circle  с_top = tangent_сircle( c_lead, TE1, R );
         CE Circle  c_bottom( с_top.o̅, R-s );
@@ -511,9 +515,6 @@ int test3()
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
         CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 1
 
-        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
-        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
-                                     // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s );
@@ -546,9 +547,6 @@ int test4()
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
         CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 1
 
-        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
-        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
-                                     // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s );
@@ -585,9 +583,6 @@ int test5()
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
         CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 1
 
-        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
-        CE Vec TE2( 1., -0.00001); // задняя кромка низ, зазор для соблюдения  
-                                     // постулата Жуковского-Чаплыгина (Kutta condition)
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent_сircle( -c_l1, c_trail, R-s );
@@ -670,8 +665,6 @@ int main( unsigned argc, const char *argv[])
         double ler = ler_abs / b_abs; // относительный радиус передней кромки
         double lef = lef_abs / b_abs; // относительный радиус скругл. передней кромки
 
-        CE Vec TE1( 1.,  0.00001); // задняя кромка верх
-        CE Vec TE2( 1., -0.00001); // задняя кромка низ, между ними зазор для соблюдения постулата Жуковского-Чаплыгина (Kutta condition)
         Circle  c_le   ( {ler, ler}, -ler );
         Circle  c_trail( TE1       , -s   );
         Circle  c_bottom = tangent_сircle( c_le, c_trail, R-s );
