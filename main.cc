@@ -8,7 +8,6 @@
 
 #define CE      constexpr
 #define ₠       constexpr
-#define CEstat  constexpr static
 #define CExplct constexpr explicit
 #define CEfrnd  constexpr friend
 
@@ -93,6 +92,20 @@ CE      Vec&    operator -=( const Vec& v) { x-=v.x, y-=v.y; return *this;  }
 CE      Vec&    operator *=( double s    ) { x *= s, y *= s; return *this;  } // Умножение на скаляр
 CE      Vec&    operator /=( double s    ) { x /= s, y /= s; return *this;  } // Деление на скаляр
 
+        // Умножение векторов как комплексных чисел
+CE      Vec&    operator *=( const Vec& r)
+        {
+                Vec tmp = {-y, x}; // поворот на 90° *this;
+                tmp *= r.y;
+                *this *= r.x;
+                *this += tmp;
+                return *this;
+        }
+        // Умножение векторов как комплексных чисел
+CEfrnd  Vec     operator * ( Vec l, const Vec& r) { l *= r; return l;}
+        // Деление векторов как комплексных чисел
+//CEfrnd  Vec     operator / ( const Vec& l, const Vec& r) { return Vec( (l,r), -(l^r) ) / (r,r); }
+
 CE      bool    operator ==( const Vec& v) const { return eq( x, v.x) && eq( y, v.y);   }
 CE      bool    operator !=( const Vec& v) const { return !(*this == v);                }
 
@@ -107,31 +120,28 @@ friend  std::ostream& operator<<( std::ostream &os, const Vec& _ )
                 return os;
         };
 
-CEfrnd  double angle( const Vec& v̅ )
+CEfrnd  double angle( const Vec& v )
         {
-                if( v̅.x > +0. ) return atan( v̅.y / v̅.x );
-                if( v̅.x < -0. ) return atan( v̅.y / v̅.x ) + π;
+                if( v.x > +0. ) return atan( v.y / v.x );
+                if( v.x < -0. ) return atan( v.y / v.x ) + π;
 
-                if( v̅.y > +0. ) return π/2;
-                if( v̅.y < -0. ) return 3π/2;
+                if( v.y > +0. ) return π/2;
+                if( v.y < -0. ) return 3π/2;
 
                 return NAN;
         }
 };
 
-class Rot;
-
 // Единичный вектор (unit vector)
 class UVec: public Vec
 {
-        friend class Rot;
-
-CE      UVec( const Vec& v      ): Vec( v    ) {}
+CExplct UVec( const Vec& v      ): Vec( v    ) {}
 CE      UVec( double x, double y): Vec( x, y ) {}
-
-public:                                                  
-CE      UVec( double θ                ): Vec( cos(θ), sin(θ)) {}
-        // нормализующий всё подряд к-тор: нормализует вектор v̅ и ещё что дадут (*p)
+public:
+        // Единичный вектор, повернутый на угол φ
+CExplct UVec( double φ                ): Vec( cos(φ), sin(φ)                        ) {}
+CE      UVec( double cos, Sing sing   ): Vec( cos   , sing * ce::sqrt( 1 - cos*cos) ) {};
+        // нормализующий всё подряд к-тор: нормализует вектор v̅ и ещё что дадут (*p)        
 CE      UVec( const Vec& v̅, double *p ): Vec( v̅)
         {
                 double l = ce::sqrt((v̅, v̅));
@@ -140,30 +150,25 @@ CE      UVec( const Vec& v̅, double *p ): Vec( v̅)
         }
 
 CEfrnd  double  ²          ( const UVec& v)       { return 1.           ;} // Скалярное произведение самого на себя = 1
-                                                                           // при поворотах нормализованность сохраняется
-CEfrnd  UVec    L          ( const UVec& v)       { return {-v.y, v.x } ;} // поворот на 90°
-CE      UVec    operator - (              ) const { return {  -x,  -y } ;} // поворот на 180°
+CEfrnd  UVec    L          ( const UVec& v)       { return {-v.y, v.x } ;} // поворот на 90°, при поворотах нормализованность сохраняется
+CE      UVec    operator - (              ) const { return {  -x,  -y } ;} // поворот на 180°, при поворотах нормализованность сохраняется
 
-static const UVec î;
-static const UVec ĵ;
+CE      UVec&   operator *=( const UVec& r) { *(Vec *)this *= r; return *this; } // Умножение векторов как комплексных чисел
+
+        // Умножение векторов как комплексных чисел
+CEfrnd  UVec    operator * ( UVec l, const UVec& r) { l *= r; return l;}
+
+static  const UVec î;
+static  const UVec ĵ;
+static  const UVec i;
 };
 
-CE const UVec UVec::î = { 1., 0. }; // единичный вектор вдоль оси 𝑋
-CE const UVec UVec::ĵ = { 0., 1. }; // единичный вектор вдоль оси 𝑌
-
-// Матрица поворота
-class Rot
-{
-        UVec û1, û2;
-
-CE      Rot( double cos, double sin ): û1( cos, -sin), û2( sin, cos) {};
-public:
-CE      Rot( double cos, Sing sing  ): Rot( cos   , sing * ce::sqrt( 1 - cos*cos) ) {};
-CE      Rot( double θ               ): Rot( cos(θ), sin(θ)                        ) {};
-
-CE       Vec operator * ( const  Vec& v̅ ) const { return { (û1, v̅), (û2, v̅) }; }
-CE      UVec operator * ( const UVec& û ) const { return { (û1, û), (û2, û) }; }
-};
+// единичный вектор вдоль оси 𝑋
+CE const UVec UVec::î = { 1., 0. };
+// единичный вектор вдоль оси 𝑌
+CE const UVec UVec::ĵ = { 0., 1. };
+// мнимая единица
+CE const UVec UVec::i = { 0., 1. };
 
 struct Line
 {
@@ -192,12 +197,12 @@ CE      double distance( const Vec& r̅) const   { return (n̂, r̅) - p; }
         // растояние между точкой r̅ и прямой l
 CEfrnd  double ρ( const Vec& r̅, const Line& l) { return l.distance( r̅); }
         // растояние между прямой l и точкой r̅
-//CEfrnd  double ρ( const Line& l, const Vec& r̅) { return l.distance( r̅); }
+CEfrnd  double ρ( const Line& l, const Vec& r̅) { return l.distance( r̅); }
 
         // проекция точки r̅ на прямую l
 CEfrnd  Vec operator >>( const Vec& r̅, const Line& l)
         {
-                return r̅ - l.n̂ * ρ( r̅, l);
+                return r̅ - l.n̂ * l.distance( r̅);
         }
 
 /*
@@ -284,15 +289,15 @@ CE      Circle operator - () const
                 // кол. сегментов, на круг - 160 сегментов, примерно
                 int segments = static_cast< int>( round( abs( Δα / 2π * 160)));
 
-                Rot M = Δα / segments;          // матрица поворота на угол Δα/segments
+                UVec m̂( Δα / segments);         // ед. век. повернутый на угол Δα/segments
                 Vec r̅ = UVec( α1) * abs( R);    // радиус от центра окружности
-                Vec s̅ = M*r̅ - r̅;                // сегментик, которым рисуем окружность
+                Vec s̅ = m̂*r̅ - r̅;                // сегментик, которым рисуем окружность
                 r̅ += o̅;
                 for( ; segments >= 0; --segments )
                 {
                         os << r̅;
                         r̅ += s̅;
-                        s̅ = M*s̅;
+                        s̅ *= m̂;
                 }
         };
 friend  std::ostream& operator<<( std::ostream &os, const Circle& _ )
@@ -382,8 +387,8 @@ CE Line tangent_line( const Circle& c1, const Circle& c2, Sing sing = plus )
 {
         Vec c̅ = c2.o̅ - c1.o̅;
         double cosθ = c2.R - c1.R;              // θ - угол между линией центров и касательной
-        UVec n̂( c̅, &cosθ );                     // смаштабировать c̅ в n̂ и заодно cosθ
-        UVec r̂ = Rot( cosθ, sing) * n̂;          // повернуть n̂ на θ в направлении sing
+        UVec r̂( c̅, &cosθ );                     // смаштабировать c̅ в r̂ и заодно cosθ
+        r̂ *= UVec( cosθ, sing);                 // повернуть n̂ на θ в направлении sing
         return Line( r̂, (r̂, c1.o̅) - c1.R );     // TODO тут где-то баг... r̅ ∥ касат., а должен быть ⊥
 }
 
