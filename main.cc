@@ -10,8 +10,25 @@
 #define CExplct constexpr explicit
 #define CEfrnd  constexpr friend
 
-//OPERATOR( +, Vec, Vec, x+=a.x; y+=a.y );
-//#define OPERATOR( o, cls1, cls2, action ) constexpr cls1& operator o##=( const cls2& a) { action; return *this; }
+#define FUNC( f) constexpr friend auto f( const This& x) { return x.f(); }
+
+// оператор со своим типом
+#define OPER_THIS( o) constexpr friend This operator o ( This t, const This& a) { return t o##= a; }
+
+// оператор с родительским типом
+#define OPER_SUPER( o) \
+constexpr friend Super operator o ( This t, const Super& a) { return t o##= a; }; \
+constexpr friend Super operator o ( Super t, const This& a) { return t o##= a; }
+
+// коммутативный оператор с каким-то простым типом
+#define OPER_COMM( o, Any) \
+constexpr friend This operator o ( This t, Any a) { return t o##= a; }; \
+constexpr friend This operator o ( Any a, This t) { return t o##= a; }
+
+// некоммутативный оператор с каким-то простым типом
+#define OPER_NOCOMM( o, Any) \
+constexpr friend This operator o ( This t,        Any a) {             return t o##= a; }; \
+constexpr friend This operator o ( Any a, const This& t) { This b( a); return b o##= t; }
 
 const class Ф{} ф; // флаг для конструкторов из сырых данных
 const class Ĵ{} ĵ; // самая мнимая единица на свете (умножение на неё поворачивает вектор на 90°)
@@ -96,7 +113,10 @@ struct Vec
 protected:
         double x, y;
 public:
+        using This = Vec;
+
 CE      Vec( Ĵ                   ): x( 0 ), y( 1 ) {}
+CExplct Vec( double x_           ): x( x_), y( 0 ) {}
 CE      Vec( double x_, double y_): x( x_), y( y_) {}
 
 CE      double  operator , ( const Vec& v) const { return  x*v.x + y*v.y  ; } // Скалярное произведение (Inner product)
@@ -108,19 +128,27 @@ CE      Vec     operator - () const { return { -x, -y }   ; } // поворот 
 CE      Vec     operator ~ () const { return {  x, -y }   ; } // Сопряжённое (conjugate) число (зеркально отраженный вектор)
 CE      Vec     conj       () const { return {  x, -y }   ; } // Сопряжённое (conjugate) число (зеркально отраженный вектор)
 CE      Vec     inv        () const { return conj()/abs²(); } // 1/v - обратная (inverse) величина
+CE      double  re         () const { return x            ; } // действительная часть
+CE      double  im         () const { return y            ; } // мнимая часть
+CE      double  ℜ         () const { return x            ; } // действительная часть
+CE      double  ℑ          () const { return y            ; } // мнимая часть
+CE      double  arg        () const
+{
+        if( x > +0. ) return atan( y / x );
+        if( x < -0. ) return atan( y / x ) + π;
 
-CE      bool    operator ==( const Vec& v) const { return  eq( this->x, v.x   ) &&  eq( this->y, v.y   ); }
-CE      bool    operator !=( const Vec& v) const { return !eq( this->x, v.x   ) || !eq( this->y, v.y   ); }
+        if( y > +0. ) return π/2;
+        if( y < -0. ) return 3π/2;
 
-CE      Vec&    operator *=( Ĵ ) { swap( x, y); x = -x; return *this; } // Умножение на мнимую
-CE      Vec&    operator /=( Ĵ ) { swap( x, y); y = -y; return *this; } // Деление на мнимую
+        return NAN;
+}
+        FUNC( abs²); FUNC( abs); FUNC( conj); FUNC( inv); FUNC( re); FUNC( im); FUNC( ℜ); FUNC( ℑ); FUNC( arg);
 
-CE      Vec&    operator +=( double s    ) {  x += s;         return *this; }
-CE      Vec&    operator -=( double s    ) {  x -= s;         return *this; }
+CE      bool    operator ==( const Vec& v) const { return  eq( this->x, v.x ) &&  eq( this->y, v.y ); }
+CE      bool    operator !=( const Vec& v) const { return !eq( this->x, v.x ) || !eq( this->y, v.y ); }
+
 CE      Vec&    operator +=( const Vec& v) {  x+=v.x; y+=v.y; return *this; }
 CE      Vec&    operator -=( const Vec& v) {  x-=v.x; y-=v.y; return *this; }
-CE      Vec&    operator *=( double s    ) {  x *= s; y *= s; return *this; } // Умножение на скаляр
-CE      Vec&    operator /=( double s    ) {  x /= s; y /= s; return *this; } // Деление на скаляр
 CE      Vec&    operator *=( const Vec& v) // Умножение векторов как комплексных чисел
         {
                 Vec rot90 = {-y, x}; // поворот на 90° *this;
@@ -130,48 +158,23 @@ CE      Vec&    operator *=( const Vec& v) // Умножение векторо�
                 return *this;
         }
 CE      Vec&    operator /=( const Vec& v) {*this *= v.inv(); return *this; } // Деление векторов как комплексных чисел
+CE      Vec&    operator /=( const NVec &n);
+        OPER_THIS( +); OPER_THIS( -); OPER_THIS( *); OPER_THIS( /);
 
-CEfrnd  Vec     operator * ( Vec v,        Ĵ) { return { -v.y,  v.x}; } // Умножение векторов как комплексных чисел
+CE      Vec&    operator +=( double s ) {  x += s;         return *this; }
+CE      Vec&    operator -=( double s ) {  x -= s;         return *this; }
+CE      Vec&    operator *=( double s ) {  x *= s; y *= s; return *this; } // Умножение на скаляр
+CE      Vec&    operator /=( double s ) {  x /= s; y /= s; return *this; } // Деление на скаляр
+        OPER_COMM( +, double); OPER_COMM( *, double); OPER_NOCOMM( -, double); OPER_NOCOMM( /, double)
+
+CE      Vec&    operator *=( Ĵ ) { swap( x, y); x = -x; return *this; } // Умножение на мнимую
+CE      Vec&    operator /=( Ĵ ) { swap( x, y); y = -y; return *this; } // Деление на мнимую
+        OPER_COMM( *, Ĵ)
 CEfrnd  Vec     operator / ( Vec v,        Ĵ) { return {  v.y, -v.x}; } //  векторов как комплексных чисел
-CEfrnd  Vec     operator * ( Ĵ, const Vec& v) { return { -v.y,  v.x}; } // на мнимую
 CEfrnd  Vec     operator / ( Ĵ, const Vec& v) { return {  v.y,  v.x}; } // на мнимую
 
-CE      Vec&    operator *=( Sgn a       ) {  x *= a._; y *= a._; return *this; } // Умножение на знак
-CEfrnd  Vec     operator * ( Vec v, Sgn a) { return v *= a; } // Умножение на знак
-CEfrnd  Vec     operator * ( Sgn a, Vec v) { return v *= a; } // Умножение на знак
-
-CEfrnd  Vec     operator + ( Vec v, const Vec& a) { return v += a; }
-CEfrnd  Vec     operator + ( Vec v, double     a) { return v += a; }
-CEfrnd  Vec     operator + ( double a,    Vec  v) { return v += a; }
-CEfrnd  Vec     operator - ( Vec v, const Vec& a) { return v -= a; }
-CEfrnd  Vec     operator - ( Vec v, double     a) { return v -= a; }
-CEfrnd  Vec     operator * ( Vec v, const Vec& a) { return v *= a; } // Умножение векторов как комплексных чисел
-CEfrnd  Vec     operator * ( Vec v, double     a) { return v *= a; } // Умножение на скаляр
-CEfrnd  Vec     operator * ( double a,    Vec  v) { return v *= a; }
-CEfrnd  Vec     operator / ( Vec v, const Vec& a) { return v /= a; }
-CEfrnd  Vec     operator / ( Vec v, double     a) { return v /= a; }
-
-CEfrnd  Vec     operator - ( double a, const Vec& v) { return Vec{ a, 0} - v; }
-CEfrnd  Vec     operator / ( double a, const Vec& v) { return v.inv() *= a  ; }
-
-CEfrnd  double  abs²       ( const Vec& v) { return v.abs²(); } // Длина²
-CEfrnd  double  abs        ( const Vec& v) { return v.abs (); } // Длина²
-CEfrnd  Vec     conj       ( const Vec& v) { return v.conj(); } // Сопряжённое (conjugate) число (зеркально отраженный вектор)
-CEfrnd  Vec     inv        ( const Vec& v) { return v.inv (); } // 1/v - обратная (inverse) величина
-CEfrnd  double  re         ( const Vec& v) { return v.x     ; } // действительная часть
-CEfrnd  double  im         ( const Vec& v) { return v.y     ; } // мнимая часть
-CEfrnd  double  ℜ          ( const Vec& v) { return v.x     ; } // действительная часть
-CEfrnd  double  ℑ          ( const Vec& v) { return v.y     ; } // мнимая часть
-CEfrnd  double  arg        ( const Vec& v)
-        {
-                if( v.x > +0. ) return atan( v.y / v.x );
-                if( v.x < -0. ) return atan( v.y / v.x ) + π;
-
-                if( v.y > +0. ) return π/2;
-                if( v.y < -0. ) return 3π/2;
-
-                return NAN;
-        }
+CE      Vec&    operator *=( Sgn a ) {  x *= a._; y *= a._; return *this; } // Умножение на знак
+        OPER_COMM( *, Sgn)
 
 friend  std::ostream& operator<<( std::ostream &os, const Vec& v )
         {
@@ -193,10 +196,12 @@ protected:
 #endif
 CE      NVec( Ф, const Vec& v      ): Vec( v   ) {}
 CE      NVec( Ф, double x, double y): Vec( x, y) {}
-
 public:
-CE      NVec( Ĵ            ): Vec( 0, 1       ) {}
-CExplct NVec( const Vec& v ): Vec( v / v.abs()) {}
+        using This = NVec;
+        using Super = Vec;
+
+CE      NVec( Ĵ            ): Vec( 0, 1                        ) {}
+CExplct NVec( const Vec& v ): Vec( v / v.abs()                 ) {}
 CExplct NVec( double sin   ): Vec( ce::sqrt( 1 - sin*sin), sin ) {}        
 CE      NVec( const Vec& v, double *p ) // нормализующий всё подряд к-тор: нормализует вектор v и ещё что дадут (*p)
         : Vec( v)
@@ -214,47 +219,43 @@ CE      NVec    operator ~ () const { return {ф,  x, -y }; } // Сопряжё�
 CE      NVec    conj       () const { return {ф,  x, -y }; } // Сопряжённое (conjugate) число (зеркально отраженный вектор)
 CE      NVec    inv        () const { return {ф,  x, -y }; } // 1/v - обратная (inverse) величина
 CE      double  ψarg       () const { double x1 = x + 1; return y>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
+        FUNC( abs²); FUNC( abs); FUNC( conj); FUNC( inv); FUNC( ψarg);
+
+CEfrnd  NVec    cis        ( double β );// { return {ф, cos(β), sin(β)}; } // Единичный вектор, повернутый на угол φ
 
 CE      bool    operator > ( const NVec& v) const { return ψarg() > v.ψarg();}
 CE      bool    operator < ( const NVec& v) const { return ψarg() < v.ψarg();}
 
-CEfrnd  double  abs²       ( const NVec& v) { return   1.          ; } // Длина²
-CEfrnd  double  abs        ( const NVec& v) { return   1.          ; } // Длина
-CEfrnd  NVec    conj       ( const NVec& v) { return {ф, v.x, -v.y}; } // Сопряжённое (conjugate) число (зеркально отраженный вектор)
-CEfrnd  NVec    inv        ( const NVec& v) { return {ф, v.x, -v.y}; } // 1/v - обратная (inverse) величина
-CEfrnd  double  ψarg       ( const NVec& v) { return   v.ψarg()    ; } // псевдоугол (для сравнений)
-CEfrnd  NVec    cis        ( double β     );// { return {ф, cos(β), sin(β)}; } // Единичный вектор, повернутый на угол φ
+CE      NVec&   operator *=( const NVec& v) { Vec::operator*=( v); return *this; } // Умножение единичных векторов как комплексных чисел
+CE      NVec&   operator /=( const NVec& v) { *this *= v.conj()  ; return *this; } // Деление векторов как комплексных чисел
+        OPER_THIS( *); OPER_THIS( /);
+
+CE      Vec&    operator *=( const  Vec& v) { Vec::operator*=( v); return *this; } // Умножение единичных векторов как комплексных чисел
+CE      Vec&    operator /=( const  Vec& v) { *this *= v.conj()  ; return *this; } // Деление векторов как комплексных чисел
+        OPER_SUPER( *); OPER_SUPER( /);
 
 CE      NVec&   operator *=( Ĵ ) { swap( x, y); x = -x; return *this; } // Умножение на мнимую
 CE      NVec&   operator /=( Ĵ ) { swap( x, y); y = -y; return *this; } // Деление на мнимую
-
-CE       Vec&   operator *=( const  Vec& v) { Vec::operator*=( v); return *this; } // Умножение единичных векторов как комплексных чисел
-CE       Vec&   operator /=( const  Vec& v) { *this *= v.conj()  ; return *this; } // Деление векторов как комплексных чисел
-CE      NVec&   operator *=( const NVec& v) { Vec::operator*=( v); return *this; } // Умножение единичных векторов как комплексных чисел
-CE      NVec&   operator /=( const NVec& v) { *this *= v.conj()  ; return *this; } // Деление векторов как комплексных чисел
-
+        //OPER_COMM( *, Ĵ); OPER_COMM( /, Ĵ);
 CEfrnd  NVec   operator * ( NVec v,        Ĵ) { return {ф, -v.y,  v.x}; } // Умножение на мнимую
-CEfrnd  NVec   operator / ( NVec v,        Ĵ) { return {ф,  v.y, -v.x}; } // Деление на мнимую
 CEfrnd  NVec   operator * ( Ĵ, const NVec& v) { return {ф, -v.y,  v.x}; } // Умножение на мнимую
+CEfrnd  NVec   operator / ( NVec v,        Ĵ) { return {ф,  v.y, -v.x}; } // Деление на мнимую
 CEfrnd  NVec   operator / ( Ĵ, const NVec& v) { return {ф,  v.y,  v.x}; } // Деление мнимой
 
-CE      NVec&  operator *=( Sgn a) { Vec::operator*=( a._); return *this; } // Умножение на знак
-CEfrnd  NVec   operator * ( NVec v, Sgn a) { return v *= a; } // Умножение на знак
-CEfrnd  NVec   operator * ( Sgn a, NVec v) { return v *= a; } // Умножение на знак
-
-CEfrnd  NVec   operator * ( NVec v, const NVec& a) { return v *= a; } // Умножение векторов как комплексных чисел
-CEfrnd  NVec   operator / ( NVec v, const NVec& a) { return v /= a; } //  векторов как комплексных чисел
-
-CEfrnd  Vec    operator * ( NVec v, const  Vec& a) { return v *= a; } // Умножение векторов как комплексных чисел
-CEfrnd  Vec    operator / ( NVec v, const  Vec& a) { return v /= a; } //  векторов как комплексных чисел
-CEfrnd  Vec    operator * (  Vec v, const NVec& a) { return v *= a; } // Умножение векторов как комплексных чисел
-CEfrnd  Vec    operator / (  Vec v, const NVec& a) { return v /= a; } //  векторов как комплексных чисел
+CE      NVec&    operator *=( Sgn a ) {  x *= a._; y *= a._; return *this; } // Умножение на знак
+        OPER_COMM( *, Sgn)
 
 static  const NVec î;
 static  const NVec ĵ;
 };
 
 CE NVec cis( double β ) { return {ф, cos(β), sin(β) }; }
+
+CE Vec& Vec::operator /=( const NVec& n)
+{
+        *this *= n.inv();
+        return *this;
+}
 
 // единичный вектор вдоль оси X
 CE const NVec NVec::î = {ф, 1, 0 };
@@ -271,8 +272,6 @@ CE Vec operator - ( double a, Ĵ) { return { a,-1}; }
 CE Vec operator * ( Ĵ, double a) { return { 0, a}; }
 CE Vec operator * ( double a, Ĵ) { return { 0, a}; }
 
-CE Vec operator ""î ( unsigned long long a) { return { double(a), 0}; }
-CE Vec operator ""î (        long double a) { return { double(a), 0}; }
 CE Vec operator ""ĵ ( unsigned long long a) { return { 0, double(a)}; }
 CE Vec operator ""ĵ (        long double a) { return { 0, double(a)}; }
 
@@ -290,6 +289,7 @@ void   Vec_test()
         CE NVec u6 = î*NVec( 0.1 );
         CE  Vec u7 = Vec( 0, 1 ) * Vec( 0.995, 0.1 ) ;
         CE NVec u8 = ĵ * NVec( 0.1 );
+        CE  Vec u9 = u7 / u8;
 
         CE NVec a = NVec( 0.1);
         static_assert( a       > î && !( a       < î), "");
@@ -828,10 +828,7 @@ int main( unsigned argc, const char *argv[])
         
         std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
                 << std::setprecision(5) << std::fixed
-                << a_top 
-                << a_lef << a_le 
-                << a_bottom << p_end << TE2
-                ;
+                << a_top << a_lef << a_le << a_bottom << p_end << TE2;
 
         return 0;
 }
