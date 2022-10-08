@@ -422,7 +422,7 @@ CE      NVec tangent_norm( const Circle& c2 ) const
         {
                 double sinφ = c2.R - R;       // φ - угол между линией центров и касательной
                 NVec â( c2.o̅ - o̅, &sinφ );    // направляющий вектор линии центров
-                return â * NVec( sinφ) / ĵ;   // повернуть â на ±φ-90°
+                return â * NVec( sinφ) / ĵ;   // повернуть â на φ-90°
         }
 
         // касательная к окружностям *this и c2
@@ -755,20 +755,20 @@ int main( unsigned argc, const char *argv[])
 #endif
 
         static CE char *param_name[] =
-        { "диаметр_трубы"
-        , "толщина_стенки_трубы"
+        { "диаметр трубы"
+        , "толщина стенки трубы"
         , "хорда"
-        , "радиус_передней_кромки"
-        , "радиус_зализа_над_передней_кромкой"
+        , "радиус передней кромки"
+        , "радиус зализа над передней кромкой"
         };
 
-        double param[ std::size( param_name)];
+        static double param[ std::size( param_name)] = { 160.0, 4.7, 50.0, 1.5, 18.0};
 
-        double &D_abs   = param[0]; // 160.0; // диаметр трубы
-        double &s_abs   = param[1]; //   4.7; // толщина стенки трубы
-        double &b_abs   = param[2]; //  50.0; // хорда профиля
-        double &ler_abs = param[3]; //   1.5; // радиус передней кромки
-        double &lef_abs = param[4]; //  18.0; // радиус скругл. передней кромки
+        double &D_abs   = param[0];  // диаметр трубы
+        double &s_abs   = param[1];  // толщина стенки трубы
+        double &b_abs   = param[2];  // хорда профиля
+        double &ler_abs = param[3];  // радиус передней кромки
+        double &lef_abs = param[4];  // радиус скругл. передней кромки
 /*
  #i fn def NDEBUG
         if( argc == 3 )
@@ -789,10 +789,16 @@ int main( unsigned argc, const char *argv[])
         if( argc <= std::size( param_name) )
         {
                 setlocale( LC_ALL, "" );
-                std::cerr << "Параметры запуска:\npipefoil";
-                for( unsigned i = 0; i < std::size( param_name); ++i)
-                        std::cerr << ' ' << param_name[ i ];
-                std::cerr << '\n';
+
+                std::cerr << "Примерные параметры запуска:\n  pipefoil";
+                for( unsigned i = 0; i < std::size( param); ++i)
+                        std::cerr << ' ' << param[ i ];
+
+                std::cerr << " >1.dat\nгде:\n";
+                for( unsigned i = 0; i < std::size( param); ++i)
+                        std::cerr << "  " << param[ i ] << "\t- " << param_name[ i ] << '\n';
+
+                std::cerr << "  1.dat\t- результат: файл с точками профиля, можно \"продуть\" его в xflr5\n";
                 return 1;
         }
 
@@ -803,7 +809,7 @@ int main( unsigned argc, const char *argv[])
                 if( *last_char)
                 {
                         setlocale( LC_ALL, "" );
-                        std::cerr << "Ошибка параметра " << param_name[i] << "\n"
+                        std::cerr << "Ошибка " << (i+1) << "-ого параметра \"" << param_name[i] << "\"\n"
                                 "\"" << argv[i+1] << "\" распозналось как \"" << param[i] << "\"\n";
                         return 1;
                 }
