@@ -230,8 +230,8 @@ CE      NVec&   operator *=( const NVec& v) { Vec::operator*=( v); return *this;
 CE      NVec&   operator /=( const NVec& v) { *this *= v.conj()  ; return *this; } // Деление векторов как комплексных чисел
         OPER_THIS( *); OPER_THIS( /);
 
-CE      Vec&    operator *=( const  Vec& v) { Vec::operator*=( v); return *this; } // Умножение единичных векторов как комплексных чисел
-CE      Vec&    operator /=( const  Vec& v) { *this *= v.conj()  ; return *this; } // Деление векторов как комплексных чисел
+CE      Vec&    operator *=( const  Vec& v) { return Vec::operator*=( v); } // Умножение единичных векторов как комплексных чисел
+CE      Vec&    operator /=( const  Vec& v) { return Vec::operator/=( v); } // Деление векторов как комплексных чисел
         OPER_SUPER( *); OPER_SUPER( /);
 
 CE      NVec&   operator *=( Ĵ ) { swap( x, y); x = -x; return *this; } // Умножение на мнимую
@@ -290,8 +290,10 @@ void   Vec_test()
         CE  Vec u7 = Vec( 0, 1 ) * Vec( 0.995, 0.1 ) ;
         CE NVec u8 = ĵ * NVec( 0.1 );
         CE  Vec u9 = u7 / u8;
+        CE  Vec ua = u8 / u7;
 
         CE NVec a = NVec( 0.1);
+        static_assert( a / Vec(3, -2) == Vec( 0.2142278701015276898, 0.1761519134010184617), "");
         static_assert( a       > î && !( a       < î), "");
         static_assert(~a       > î && !(~a       < î), "");
         static_assert(~a       > a && !(~a       < a), "");
@@ -544,7 +546,7 @@ CE      bool operator ==( const Arc& a) const
                 CE const NVec m̂⁵ = m̂*m̂*m̂*m̂*m̂;
 
                 NVec m̂¹⁰ = m̂⁵*m̂⁵;
-                bool dir = (R >= 0);
+                bool dir = (R >= 0); // направление рисования
                 if( !dir )
                         m̂¹⁰ = ~m̂¹⁰;
 
