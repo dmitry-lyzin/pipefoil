@@ -31,8 +31,7 @@ constexpr friend This operator o ( This t,        Any a) {             return t 
 constexpr friend This operator o ( Any a, const This& t) { This b( a); return b o##= t; }
 
 const class Ф{} ф; // флаг для конструкторов из сырых данных
-const class Ĵ{} ĵ; // самая мнимая единица на свете (умножение на неё поворачивает вектор на 90°)
-//CE const Ĵ ⅈ;
+const class Ĵ{} ĵ; // самая мнимая единица на свете (умножение на неё поворачивает вектор на 90°) ⅈ
 
 class  Vec;
 class NVec;
@@ -59,8 +58,9 @@ friend  class NVec;
 
 namespace ce
 {
-CE inline double abs  ( double a) { return a >= 0 ? a : -a; }
+        CE inline double abs  ( double a) { return a >= 0 ? a : -a; }
 
+        //https://gist.github.com/alexshtf/eb5128b3e3e143187794
         double CE sqrt_Newton_Raphson( double x, double curr, double prev)
         {
                 return curr == prev ? curr
@@ -81,29 +81,27 @@ CE inline double abs  ( double a) { return a >= 0 ? a : -a; }
         }
 }
 
-// epsilon ≠ std::numeric_limits< double>::epsilon();
-CE const double eps = 1e-14;
 CE const double π = 3.14159265358979323846;
 #pragma warning( disable: 4455)
 CE const double operator ""π  ( unsigned long long a) { return π * a;                }
 CE const double operator ""⅟²(        long double a) { return ce::sqrt( double(a)); }
 CE const double operator ""⅟²( unsigned long long a) { return ce::sqrt( double(a)); }
 
-CE inline double     ²( double a)
+CE inline double  ²( double a)
 {
         return a * a;
 }
-CE inline void swap   ( double &a, double &b)
+CE inline void swap( double &a, double &b)
 {
         double a0 = a;
         a = b;
         b = a0;
 }
-CE inline bool eq     ( double a, double b)
+CE inline bool eq  ( double a, double b)
 {
         if( (a -= b) < 0 )
                 a = -a;
-        return a < eps;
+        return a < 1e-14; // epsilon ≠ std::numeric_limits< double>::epsilon();
 }
 
 #pragma region // Vec{}, NVec{}
@@ -157,7 +155,7 @@ CE      Vec&    operator *=( const Vec& v) // Умножение векторо�
                 *this += rot90;
                 return *this;
         }
-CE      Vec&    operator /=( const Vec& v) {*this *= v.inv(); return *this; } // Деление векторов как комплексных чисел
+CE      Vec&    operator /=( const Vec& v) { return (*this *= v.inv());  } // Деление векторов как комплексных чисел
 CE      Vec&    operator /=( const NVec &n);
         OPER_THIS( +); OPER_THIS( -); OPER_THIS( *); OPER_THIS( /);
 
@@ -170,8 +168,8 @@ CE      Vec&    operator /=( double s ) {  x /= s; y /= s; return *this; } // Д
 CE      Vec&    operator *=( Ĵ ) { swap( x, y); x = -x; return *this; } // Умножение на мнимую
 CE      Vec&    operator /=( Ĵ ) { swap( x, y); y = -y; return *this; } // Деление на мнимую
         OPER_COMM( *, Ĵ)
-CEfrnd  Vec     operator / ( Vec v,        Ĵ) { return {  v.y, -v.x}; } //  векторов как комплексных чисел
-CEfrnd  Vec     operator / ( Ĵ, const Vec& v) { return {  v.y,  v.x}; } // на мнимую
+CEfrnd  Vec     operator / ( Vec v,        Ĵ) { return { v.y, -v.x}; } //  векторов как комплексных чисел
+CEfrnd  Vec     operator / ( Ĵ, const Vec& v) { return { v.y,  v.x}; } // на мнимую
 
 CE      Vec&    operator *=( Sgn a ) {  x *= a._; y *= a._; return *this; } // Умножение на знак
         OPER_COMM( *, Sgn)
@@ -200,9 +198,9 @@ public:
         using This = NVec;
         using Super = Vec;
 
-CE      NVec( Ĵ            ): Vec( 0, 1                        ) {}
-CExplct NVec( const Vec& v ): Vec( v / v.abs()                 ) {}
-CExplct NVec( double sin   ): Vec( ce::sqrt( 1 - sin*sin), sin ) {}        
+CE      NVec( Ĵ            ): Vec( 0., 1.                       ) {}
+CExplct NVec( const Vec& v ): Vec( v / v.abs()                  ) {}
+CExplct NVec( double sin   ): Vec( ce::sqrt( 1. - sin*sin), sin ) {}        
 CE      NVec( const Vec& v, double *p ) // нормализующий всё подряд к-тор: нормализует вектор v и ещё что дадут (*p)
         : Vec( v)
         {
@@ -218,7 +216,7 @@ CE      NVec    operator - () const { return {ф, -x, -y }; } // поворот 
 CE      NVec    operator ~ () const { return {ф,  x, -y }; } // Сопряжённое (conjugate) число (зеркально отраженный вектор)
 CE      NVec    conj       () const { return {ф,  x, -y }; } // Сопряжённое (conjugate) число (зеркально отраженный вектор)
 CE      NVec    inv        () const { return {ф,  x, -y }; } // 1/v - обратная (inverse) величина
-CE      double  ψarg       () const { double x1 = x + 1; return y>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
+CE      double  ψarg       () const { double x1 = x + 1.; return y>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
         FUNC( abs²); FUNC( abs); FUNC( conj); FUNC( inv); FUNC( ψarg);
 
 CEfrnd  NVec    cis        ( double β );// { return {ф, cos(β), sin(β)}; } // Единичный вектор, повернутый на угол φ
@@ -227,12 +225,9 @@ CE      bool    operator > ( const NVec& v) const { return ψarg() > v.ψarg();}
 CE      bool    operator < ( const NVec& v) const { return ψarg() < v.ψarg();}
 
 CE      NVec&   operator *=( const NVec& v) { Vec::operator*=( v); return *this; } // Умножение единичных векторов как комплексных чисел
-CE      NVec&   operator /=( const NVec& v) { *this *= v.conj()  ; return *this; } // Деление векторов как комплексных чисел
-        OPER_THIS( *); OPER_THIS( /);
-
-CE      Vec&    operator *=( const  Vec& v) { return Vec::operator*=( v); } // Умножение единичных векторов как комплексных чисел
+CE      NVec&   operator /=( const NVec& v) { return (*this *= v.conj()); } // Деление векторов как комплексных чисел
 CE      Vec&    operator /=( const  Vec& v) { return Vec::operator/=( v); } // Деление векторов как комплексных чисел
-        OPER_SUPER( *); OPER_SUPER( /);
+        OPER_THIS( *); OPER_THIS( /); OPER_SUPER( /);
 
 CE      NVec&   operator *=( Ĵ ) { swap( x, y); x = -x; return *this; } // Умножение на мнимую
 CE      NVec&   operator /=( Ĵ ) { swap( x, y); y = -y; return *this; } // Деление на мнимую
@@ -249,31 +244,29 @@ static  const NVec î;
 static  const NVec ĵ;
 };
 
-CE NVec cis( double β ) { return {ф, cos(β), sin(β) }; }
+CE NVec cis( double β )
+{       return {ф, cos(β), sin(β) }; }
 
-CE Vec& Vec::operator /=( const NVec& n)
-{
-        *this *= n.inv();
-        return *this;
-}
+CE Vec& Vec::operator /=( const NVec& n) 
+{       return (*this *= n.inv()); }
 
 // единичный вектор вдоль оси X
-CE const NVec NVec::î = {ф, 1, 0 };
+CE const NVec NVec::î = {ф, 1., 0. };
 // единичный вектор вдоль оси Y, мнимая единица
-CE const NVec NVec::ĵ = {ф, 0, 1 };
+CE const NVec NVec::ĵ = {ф, 0., 1. };
 
 // единица
 CE const NVec î = NVec::î;
 
-CE Vec operator + ( Ĵ, double a) { return { a, 1}; }
-CE Vec operator + ( double a, Ĵ) { return { a, 1}; }
-CE Vec operator - ( Ĵ, double a) { return {-a, 1}; }
-CE Vec operator - ( double a, Ĵ) { return { a,-1}; }
-CE Vec operator * ( Ĵ, double a) { return { 0, a}; }
-CE Vec operator * ( double a, Ĵ) { return { 0, a}; }
+CE Vec operator + ( Ĵ, double a) { return {  a,  1.}; }
+CE Vec operator + ( double a, Ĵ) { return {  a,  1.}; }
+CE Vec operator - ( Ĵ, double a) { return { -a,  1.}; }
+CE Vec operator - ( double a, Ĵ) { return {  a, -1.}; }
+CE Vec operator * ( Ĵ, double a) { return { 0.,  a }; }
+CE Vec operator * ( double a, Ĵ) { return { 0.,  a }; }
 
-CE Vec operator ""ĵ ( unsigned long long a) { return { 0, double(a)}; }
-CE Vec operator ""ĵ (        long double a) { return { 0, double(a)}; }
+CE Vec operator ""ĵ ( unsigned long long a) { return { 0., double(a)}; }
+CE Vec operator ""ĵ (        long double a) { return { 0., double(a)}; }
 
 void   Vec_test()
 {
