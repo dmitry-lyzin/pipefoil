@@ -5,61 +5,106 @@
 #include <cstring>
 #include <clocale>
 #include <cassert>
+#include <type_traits>
 
 #define CE      constexpr
 #define E       explicit
 #define F       friend
 #define OP      operator
 #define ъ       const
-#define This    ᅟ // hangul choseong filler: U+115F
+#define This    ​ // этот тип
 #define Thisъ   This ъ
 #define ㄥ       cis
 
 #define FN( f) constexpr friend auto f( const This& r) -> decltype( r.f()) { return r.f(); }
 
-// оператор со своим типом
-#define OP_THIS( o) constexpr friend This operator o ( This t, const This& a) { return t o##= a; }
+template< typename T
+        , typename = decltype( std::declval<T>().print( std::declval< std::ostream&>()) )
+        >
+std::ostream& operator <<( std::ostream& os, const T& t)
+{
+        t.print( os);
+        return os;
+}
 
-// оператор с родительским типом
-#define OP_SUPER( o) \
-constexpr friend Super operator o ( This t, const Super& a) { return t o##= a; }; \
-constexpr friend Super operator o ( Super t, const This& a) { return t o##= a; }
+#pragma region // template operators
 
-// коммутативный оператор с каким-то простым типом
-#define OP_C( o, Any) \
-constexpr friend This operator o ( This t, Any a) { return t o##= a; }; \
-constexpr friend This operator o ( Any a, This t) { return t o##= a; }
+template< typename... >
+using void_t = void;
 
-// некоммутативный оператор с каким-то простым типом
-#define OP_₡( o, Any) \
-constexpr friend This operator o ( This t,        Any a) {             return t o##= a; }; \
-constexpr friend This operator o ( Any a, const This& t) { This b( a); return b o##= t; }
+template< typename T, typename U, typename = void> struct exist_oper_plus_eq:  std::false_type {};
+template< typename T, typename U, typename = void> struct exist_oper_minus_eq: std::false_type {};
+template< typename T, typename U, typename = void> struct exist_oper_mul_eq:   std::false_type {};
+template< typename T, typename U, typename = void> struct exist_oper_div_eq:   std::false_type {};
+
+template< typename T, typename U>
+struct exist_oper_plus_eq < T, U, void_t< decltype( std::declval< T>() += std::declval< U>())> >
+        : std::true_type
+{};
+template< typename T, typename U>
+struct exist_oper_minus_eq< T, U, void_t< decltype( std::declval< T>() -= std::declval< U>())> >
+        : std::true_type
+{};
+template< typename T, typename U>
+struct exist_oper_mul_eq  < T, U, void_t< decltype( std::declval< T>() *= std::declval< U>())> >
+        : std::true_type
+{};
+template< typename T, typename U>
+struct exist_oper_div_eq  < T, U, void_t< decltype( std::declval< T>() /= std::declval< U>())> >
+        : std::true_type
+{};
+
+/*
+#define OP_B( o, name, U )                                                        \
+template< typename T> CE std::enable_if_t<   exist_oper_##name##_eq< U, T>::value    \
+, U> operator o ( U u, const T& t) { u o##= t; return u; };
+*/
+
+// U o= T -> U o T
+#define OP_B( o, name, U )                      \
+template< typename T>                           \
+CE auto operator o ( U u, const T& t) ->        \
+std::remove_reference_t< decltype( u o##= t )>  \
+{ u o##= t; return u; };
+
+// коммутативный оператор с каким-то типом
+#define OP_C( o, name, U )                                      \
+template< typename T>                                           \
+CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
+                   &&  exist_oper_##name##_eq< U, T>::value     \
+, U> operator o ( const T& t, const U& u)                       \
+{                                                               \
+        U u1( u);                                               \
+        u1 o##= t;                                              \
+        return u1;                                              \
+};
+
+// некоммутативный оператор с каким-то типом
+#define OP_Ȼ( o, name, U )                                      \
+template< typename T>                                           \
+CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
+                   &&  exist_oper_##name##_eq< U, T>::value     \
+, U> operator o ( const T& t, const U& u)                       \
+{                                                               \
+        U t1( t);                                               \
+        t1 o##= u;                                              \
+        return t1;                                              \
+};
+
+// оба варианта коммутативного оператора с каким-то типом
+#define OPS_C( o, name, U ) OP_B( o, name, U ) OP_C( o, name, U )
+
+// оба варианта некоммутативного оператора с каким-то типом
+#define OPS_Ȼ( o, name, U ) OP_B( o, name, U ) OP_Ȼ( o, name, U )
+
+#pragma endregion
+
 
 ъ class Ф{} ф; // флаг для конструкторов из сырых данных
 ъ class 𝐈{} 𝐢; // самая мнимая единица на свете (настолько мнимая, что даже память не занимает!)
 
 struct ℂ;
 struct ℂ₁;
-
-class Sgn
-{
-        int _;
-CE      Sgn( Ф, int a): _( a) {};
-public:
-CE E    Sgn( bool   a): _( a      ? +1 : -1) {}; // Sgn( false) = -1, Sgn( true) = +1
-CE E    Sgn( int    a): _( a >= 0 ? +1 : -1) {};
-CE E    Sgn( double a): _( a >= 0 ? +1 : -1) {};
-
-CE      Sgn    operator *=( Sgn s          ) { _ *= s._; return *this; }
-CE F    Sgn    operator * ( Sgn s, Sgn    a) { return s *= a;  }
-CE F    double operator *=( double a, Sgn s) { return a *= s._;} // Умножение на знак
-CE F    double operator * ( Sgn s, double a) { return s._ * a; } // Умножение на знак
-CE F    double operator * ( double a, Sgn s) { return s._ * a; } // Умножение на знак
-CE      Sgn    operator - () ъ           { return {ф, -_}; }
-
-friend  struct ℂ;
-friend  struct ℂ₁;
-};
 
 namespace ce
 {
@@ -128,7 +173,7 @@ CE      double  abs  () ъ { return ce::sqrt(abs²());} // абсолютная 
 CE      This    OP - () ъ { return { -r, -i }   ; } // унарный минус
 CE      This    OP ~ () ъ { return {  r, -i }   ; } // Сопряжённое (conjugate) число
 CE      This    conj () ъ { return {  r, -i }   ; } // Сопряжённое (conjugate) число
-CE      This    recip() ъ { return conj()/abs²(); } // 1/z - обратная величина (reciprocal, multiplicative inverse)
+CE      This    recip() ъ { This z( r, -i); z /= abs²(); return z; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
 CE      double  re   () ъ { return r            ; } // действительная часть
 CE      double  im   () ъ { return i            ; } // мнимая часть
 CE      double  ℜ   () ъ { return r            ; } // действительная часть
@@ -158,40 +203,37 @@ CE      This&   OP *=( Thisъ& z) // Умножение векторов как 
                 *this += rot90;
                 return *this;
         }
-CE      This&   OP /=( Thisъ& z) { return (*this *= z.recip());  } // Деление векторов как комплексных чисел
+CE      This&   OP /=( Thisъ& z) { return (*this *= z.recip());  } // Деление КЧ на другое КЧ
 CE      This&   OP /=( ℂ₁ ъ& n);                                  // Деление КЧ на единичное КЧ дает КЧ
-        OP_THIS( +); OP_THIS( -); OP_THIS( *); OP_THIS( /);
 
 CE      This&   OP +=( double s) { r += s;         return *this; }
 CE      This&   OP -=( double s) { r -= s;         return *this; }
 CE      This&   OP *=( double s) { r *= s; i *= s; return *this; } // Умножение на скаляр
 CE      This&   OP /=( double s) { r /= s; i /= s; return *this; } // Деление на скаляр
-        OP_C( +, double); OP_C( *, double); OP_₡( -, double); OP_₡( /, double)
+
+CE      This&   OP *=( 𝐈 ъ& ) { swap( r, i); r = -r; return *this; } // Умножение на мнимую
+CE      This&   OP /=( 𝐈 ъ& ) { swap( r, i); i = -i; return *this; } // Деление на мнимую
 
 // на время представим, что наше комплексное число это вектор...
-CE      double  OP , ( Thisъ& v) ъ { return  r*v.r + i*v.i  ; } // Скалярное произведение (Inner product)
-CE      double  OP ^ ( Thisъ& v) ъ { return  r*v.i - i*v.r  ; } // Псевдоскалярное, Векторное, косое произведение (Outer, cross product)
+CE      double  OP , ( Thisъ& v) ъ { return  r*v.r + i*v.i; } // Скалярное произведение (Inner product)
+CE      double  OP ^ ( Thisъ& v) ъ { return  r*v.i - i*v.r; } // Псевдоскалярное, Векторное, косое произведение (Outer, cross product)
 
-CE      This&   OP *=( 𝐈 ) { swap( r, i); r = -r; return *this; } // Умножение на мнимую
-CE      This&   OP /=( 𝐈 ) { swap( r, i); i = -i; return *this; } // Деление на мнимую
-        OP_C( *, 𝐈)
-CE F    This    OP / ( Thisъ& z, 𝐈) { return { z.i, -z.r}; } // Деление на мнимую
-CE F    This    OP / ( 𝐈, Thisъ& z) { return { z.i,  z.r}; } // Деление мнимой
-
-CE      This&   OP *=( Sgn a ) {  r *= a._; i *= a._; return *this; } // Умножение на знак
-        OP_C( *, Sgn)
-
-friend  std::ostream& OP<<( std::ostream &os, Thisъ& z )
+        void print( std::ostream& os) ъ
         {
                 static This last = { NAN, NAN };
-                if( last != z )
+                if( last != *this )
                 {
-                        os << std::setw(8) <<z.r << std::setw(12) <<z.i << '\n';
-                        last = z;
+                        os << std::setw(8) << this->r << std::setw(12) << this->i << '\n';
+                        last = *this;
                 }
-                return os;
         };
 };
+
+OPS_C( +, plus,  ℂ )
+OPS_Ȼ( -, minus, ℂ )
+OPS_C( *, mul,   ℂ )
+OPS_Ȼ( /, div,   ℂ )
+
 
 // Единичное Комплексное Число (Unit Complex Number). ℂ₁ = {𝑧 ∈ ℂ: |𝑧| = 1}
 struct ℂ₁: public ℂ
@@ -237,22 +279,17 @@ CE      bool    OP < ( Thisъ& z) ъ { return ψarg() < z.ψarg();}
 CE      This&   OP *=( Thisъ& z) { Super::OP *=( z); return *this; } // ЕКЧ*ЕКЧ = ЕКЧ
 CE      This&   OP /=( Thisъ& z) { return (*this *= z.conj());     } // ЕКЧ/ЕКЧ = ЕКЧ, при этом само деление вырождено
 CE      ℂ&     OP /=( ℂ ъ& z ) { return ℂ::OP /=( z); }            // КЧ/ЕКЧ = КЧ
-        OP_THIS( *); OP_THIS( /); OP_SUPER( /);
 
-CE      This&   OP *=( 𝐈 ) { swap( r, i); r = -r; return *this; } // Умножение на мнимую
-CE      This&   OP /=( 𝐈 ) { swap( r, i); i = -i; return *this; } // Деление на мнимую
-        //OP_C( *, 𝐈); OP_C( /, 𝐈);
-CE F    This    OP * ( Thisъ& z, 𝐈) { return {-z.i,  z.r}; } // Умножение на мнимую
-CE F    This    OP * ( 𝐈, Thisъ& z) { return {-z.i,  z.r}; } // Умножение на мнимую
-CE F    This    OP / ( Thisъ& z, 𝐈) { return { z.i, -z.r}; } // Деление на мнимую
-CE F    This    OP / ( 𝐈, Thisъ& z) { return { z.i,  z.r}; } // Деление мнимой
-
-CE      This&   OP *=( Sgn a ) {  r *= a._; i *= a._; return *this; } // Умножение на знак
-        OP_C( *, Sgn)
+CE      This&   OP *=( 𝐈 ъ& ) { swap( r, i); r = -r; return *this; } // Умножение на мнимую
+CE      This&   OP /=( 𝐈 ъ& ) { swap( r, i); i = -i; return *this; } // Деление на мнимую
 
 static  Thisъ 𝟏;
 static  Thisъ 𝐢;
 };
+
+OPS_C( *, mul,   ℂ₁)
+OPS_Ȼ( /, div,   ℂ₁)
+
 
 // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
 CE ℂ₁ cis( double 𝜑 )
@@ -269,13 +306,6 @@ CE ъ ℂ₁ ℂ₁::𝐢 = { 0., 1. };
 // единица
 CE ъ ℂ₁ 𝟏 = ℂ₁::𝟏;
 
-CE ℂ OP + ( 𝐈, double a) { return {  a,  1.}; }
-CE ℂ OP + ( double a, 𝐈) { return {  a,  1.}; }
-CE ℂ OP - ( 𝐈, double a) { return { -a,  1.}; }
-CE ℂ OP - ( double a, 𝐈) { return {  a, -1.}; }
-CE ℂ OP * ( 𝐈, double a) { return { 0.,  a }; }
-CE ℂ OP * ( double a, 𝐈) { return { 0.,  a }; }
-
 CE ℂ OP ""𝐢 ( unsigned long long a) { return { 0., double(a)}; }
 CE ℂ OP ""𝐢 (        long double a) { return { 0., double(a)}; }
 
@@ -285,8 +315,10 @@ void   ℂ_test()
         static_assert( (4 + 𝐢)*(5 + 3𝐢) + (3 + 𝐢)*(3 - 2𝐢) == (28 + 14𝐢), "");
 
         // это просто должно скомпилиться
+        CE auto a0 = ℂ₁( 0.1 ) * ℂ( 0, 1 );
         CE ℂ₁ u0 = 𝐢;        
         CE ℂ₁ u1 = 𝟏 / 𝐢;
+        CE ℂ  u2 = ℂ₁( 0.1 ) *= 𝐢;
         CE ℂ₁ u3 = ℂ₁( 0.1 );
         CE ℂ₁ u4 = u3 * ℂ₁( 0.1 ) / 𝐢;
         CE ℂ₁ u5 = 𝟏/ℂ₁( 0.1 );
@@ -295,6 +327,8 @@ void   ℂ_test()
         CE ℂ₁ u8 = 𝐢 * ℂ₁( 0.1 );
         CE ℂ  u9 = u7 / u8;
         CE ℂ  ua = u8 / u7;
+        CE ℂ  ub = u7 + u9;
+        CE ℂ  uc = u7 * 9;
 
         CE ℂ₁ a = ℂ₁( 0.1);
         static_assert( a / ℂ(3, -2) == ℂ( 0.2142278701015276898, 0.1761519134010184617), "");
@@ -377,10 +411,9 @@ CE      Segment( Line ъ& l, ℂ ъ& p1_, ℂ ъ& p2_ )
         // обмен концов (рисоваться будет в другую сторону)
 CE      Segment OP - () ъ { return Segment( this->p̅2, this->p̅1 ); }
 
-friend  std::ostream& OP <<( std::ostream &os, Segment ъ& _ )
+        void print( std::ostream& os) ъ
         {
-                os <<_.p̅1 <<_.p̅2;
-                return os;
+                os << p̅1 << p̅2;
         };
 };
 
@@ -478,7 +511,6 @@ CE      ℂ tangent_point( ℂ ъ& p ) ъ
                         r̅ += ( s̅ *= m̂ );
                 }
         };
-friend  std::ostream& OP <<( std::ostream &os, Circle ъ& _ ) { _.print( os); return os; };
 };
 void   Circle_test()
 {
@@ -561,7 +593,6 @@ CE      bool OP ==( Arc ъ& a) ъ
                 for( ℂ₁ n̂ = m̂¹⁰; (ψarg(n̂) < a₂₁) == dir; n̂ *= m̂¹⁰ )
                         os << (o̅ + r̅*n̂);
         };
-friend  std::ostream& OP <<( std::ostream &os, Arc ъ& _) { _.print( os); return os; };
 };
 
 // зазор для соблюдения постулата Жуковского-Чаплыгина (Kutta condition)
