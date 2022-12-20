@@ -14,7 +14,7 @@
 #define ъ       const
 #define This    ​ // этот тип
 #define Thisъ   This ъ
-#define ㄥ       cis
+#define ㄥ      *cis
 
 #define FN( f) constexpr friend auto f( const This& r) -> decltype( r.f()) { return r.f(); }
 
@@ -61,13 +61,14 @@ template< typename T> CE std::enable_if_t<   exist_oper_##name##_eq< U, T>::valu
 */
 
 // U o= T -> U o T
-#define OP_B( o, name, U )                      \
+#define OP_B( o, U )                            \
 template< typename T>                           \
 CE auto operator o ( U u, const T& t) ->        \
 std::remove_reference_t< decltype( u o##= t )>  \
 { u o##= t; return u; };
 
 // коммутативный оператор с каким-то типом
+// U o= T -> T o U
 #define OP_C( o, name, U )                                      \
 template< typename T>                                           \
 CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
@@ -80,6 +81,7 @@ CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
 };
 
 // некоммутативный оператор с каким-то типом
+// U o= T -> T o U
 #define OP_Ȼ( o, name, U )                                      \
 template< typename T>                                           \
 CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
@@ -92,10 +94,10 @@ CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
 };
 
 // оба варианта коммутативного оператора с каким-то типом
-#define OPS_C( o, name, U ) OP_B( o, name, U ) OP_C( o, name, U )
+#define OPS_C( o, name, U ) OP_B( o, U ) OP_C( o, name, U )
 
 // оба варианта некоммутативного оператора с каким-то типом
-#define OPS_Ȼ( o, name, U ) OP_B( o, name, U ) OP_Ȼ( o, name, U )
+#define OPS_Ȼ( o, name, U ) OP_B( o, U ) OP_Ȼ( o, name, U )
 
 #pragma endregion
 
@@ -188,7 +190,18 @@ CE      double  arg  () ъ
 
                 return NAN;
         }
-        FN( abs²); FN( abs); FN( conj); FN( recip); FN( re); FN( im); FN( ℜ); FN( ℑ); FN( arg);
+CE      This    sqrt () ъ // корень
+        {
+                double abs1 = abs();
+                This rv = { ce::sqrt( (abs1 + r)/2 )
+                          , ce::sqrt( (abs1 - r)/2 )
+                          };
+                if( i < 0 )
+                        rv.i = -rv.i;
+                return rv;
+        }
+
+        FN( abs²); FN( abs); FN( conj); FN( recip); FN( re); FN( im); FN( ℜ); FN( ℑ); FN( arg); FN( sqrt);
 
 CE      bool    OP ==( Thisъ& z) ъ { return  eq( this->r, z.r ) &&  eq( this->i, z.i ); }
 CE      bool    OP !=( Thisъ& z) ъ { return !eq( this->r, z.r ) || !eq( this->i, z.i ); }
@@ -244,7 +257,7 @@ struct ℂ₁: public ℂ
 #ifndef NDEBUG
 CE      This( Ф, double r, double i): Super( r, i) {}
 #endif
-protected:
+private:
 CE      This( Ф, Super ъ& z     ): Super( z   ) {}
 CE      This( double r, double i): Super( r, i) {}
 
@@ -269,7 +282,16 @@ CE      This    OP ~ () ъ { return { r, -i }; } // Сопряжённое (conj
 CE      This    conj () ъ { return { r, -i }; } // Сопряжённое (conjugate) число
 CE      This    recip() ъ { return { r, -i }; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
 CE      double  ψarg () ъ { double x1 = r + 1.; return i>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
-        FN( abs²); FN( abs); FN( conj); FN( recip); FN( ψarg);
+CE      This    sqrt () ъ
+        {
+                double i0 = ce::sqrt( (1. - r)/2 );
+                if( i < 0 )
+                        i0 = -i0;
+                return { ce::sqrt( (1. + r)/2 )
+                       , i0
+                       };
+        }
+        FN( abs²); FN( abs); FN( conj); FN( recip); FN( ψarg); FN( sqrt);
 
 CE F    This    cis  ( double 𝜑 );// { return { cos(𝜑), sin(𝜑)}; } // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
 
@@ -311,6 +333,7 @@ CE ℂ OP ""𝐢 (        long double a) { return { 0., double(a)}; }
 
 void   ℂ_test()
 {
+        static_assert( sqrt( -𝟏) == 𝐢, "");
         static_assert( (5 + 𝐢)*(7 - 6𝐢) / (3 + 𝐢)          == (10 - 11𝐢), "");
         static_assert( (4 + 𝐢)*(5 + 3𝐢) + (3 + 𝐢)*(3 - 2𝐢) == (28 + 14𝐢), "");
 
