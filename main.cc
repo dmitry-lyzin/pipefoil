@@ -10,6 +10,7 @@
 #define CE      constexpr
 #define E       explicit
 #define F       friend
+#define S       static
 #define OP      operator
 #define ъ       const
 #define This    ​ // этот тип
@@ -60,7 +61,7 @@ template< typename T> CE std::enable_if_t<   exist_oper_##name##_eq< U, T>::valu
 , U> operator o ( U u, const T& t) { u o##= t; return u; };
 */
 
-// U o= T -> U o T
+// U o= T → U o T
 #define OP_B( o, U )                            \
 template< typename T>                           \
 CE auto operator o ( U u, const T& t) ->        \
@@ -81,7 +82,7 @@ CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
 };
 
 // некоммутативный оператор с каким-то типом
-// U o= T -> T o U
+// U o= T → T o U
 #define OP_Ȼ( o, name, U )                                      \
 template< typename T>                                           \
 CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
@@ -94,10 +95,17 @@ CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
 };
 
 // оба варианта коммутативного оператора с каким-то типом
-#define OPS_C( o, name, U ) OP_B( o, U ) OP_C( o, name, U )
+#define OPS_C( oper, oper_name, type ) OP_B( oper, type ) OP_C( oper, oper_name, type )
 
 // оба варианта некоммутативного оператора с каким-то типом
-#define OPS_Ȼ( o, name, U ) OP_B( o, U ) OP_Ȼ( o, name, U )
+#define OPS_Ȼ( oper, oper_name, type ) OP_B( oper, type ) OP_Ȼ( oper, oper_name, type )
+
+// создать арифметические операторы (+-*/) для type
+#define OPS_ARITH( type)       \
+OPS_C( +, plus,  type )        \
+OPS_Ȼ( -, minus, type )        \
+OPS_C( *, mul,   type )        \
+OPS_Ȼ( /, div,   type )
 
 #pragma endregion
 
@@ -110,7 +118,12 @@ struct ℂ₁;
 
 namespace ce
 {
-        CE inline double abs  ( double a) { return a >= 0 ? a : -a; }
+        CE double    abs( double    a) { return a >= 0 ? a : -a; }
+        CE int       abs( int       a) { return a >= 0 ? a : -a; };
+        CE long      abs( long      a) { return a >= 0 ? a : -a; };
+        CE long long abs( long long a) { return a >= 0 ? a : -a; };
+//        CE __int64   abs( __int64   a) { return a >= 0 ? a : -a; };
+
 
         //https://gist.github.com/alexshtf/eb5128b3e3e143187794
         double CE sqrt_Newton_Raphson( double r, double curr, double prev)
@@ -143,12 +156,6 @@ CE inline double  ²( double a)
 {
         return a * a;
 }
-CE inline void swap( double &a, double &b)
-{
-        double a0 = a;
-        a = b;
-        b = a0;
-}
 CE inline bool eq  ( double a, double b)
 {
         if( (a -= b) < 0 )
@@ -156,16 +163,258 @@ CE inline bool eq  ( double a, double b)
         return a < 1e-14; // epsilon ≠ std::numeric_limits< double>::epsilon();
 }
 
+namespace impl
+{
+        template<class T> struct longer           {                        };
+        template<       > struct longer< char    >{ using type = short;    };
+        template<       > struct longer<  uint8_t>{ using type = uint16_t; };
+        template<       > struct longer< uint16_t>{ using type = uint32_t; };
+        template<       > struct longer< uint32_t>{ using type = uint64_t; };
+        //template<       > struct longer< uint64_t>{ using type = uint128_t;};
+        template<       > struct longer<   int8_t>{ using type =  int16_t; };
+        template<       > struct longer<  int16_t>{ using type =  int32_t; };
+        template<       > struct longer<  int32_t>{ using type =  int64_t; };
+        //template<       > struct longer<  int64_t>{ using type =  int128_t;};
+
+        template<class T> struct shorter           {                        };
+        template<       > struct shorter< uint16_t>{ using type =  uint8_t; };
+        template<       > struct shorter< uint32_t>{ using type = uint16_t; };
+        template<       > struct shorter< uint64_t>{ using type = uint32_t; };
+        //template<       > struct shorter<uint128_t>{ using type = uint64_t; };
+        template<       > struct shorter<  int16_t>{ using type =   int8_t; };
+        template<       > struct shorter<  int32_t>{ using type =  int16_t; };
+        template<       > struct shorter<  int64_t>{ using type =  int32_t; };
+        //template<       > struct shorter< int128_t>{ using type =  int64_t; };
+
+        template<class T> struct sgned           {                        };
+        template<       > struct sgned<  uint8_t>{ using type =  int8_t; };
+        template<       > struct sgned< uint16_t>{ using type = int16_t; };
+        template<       > struct sgned< uint32_t>{ using type = int32_t; };
+        template<       > struct sgned< uint64_t>{ using type = int64_t; };
+        //template<       > struct sgned<uint128_t>{ using type = int128_t; };
+
+        template<class T> struct unsgned          {                        };
+        template<       > struct unsgned< char   >{ using type = unsigned char; };
+        template<       > struct unsgned<  int8_t>{ using type =  uint8_t;      };
+        template<       > struct unsgned< int16_t>{ using type = uint16_t;      };
+        template<       > struct unsgned< int32_t>{ using type = uint32_t;      };
+        template<       > struct unsgned< int64_t>{ using type = uint64_t;      };
+        //template<       > struct unsgned<int128_t>{ using type = uint128_t; };
+}
+template< typename T> using longer  = typename impl::longer < T>::type;
+template< typename T> using shorter = typename impl::shorter< T>::type;
+template< typename T> using sgned   = typename impl::sgned  < T>::type;
+template< typename T> using unsgned = typename impl::unsgned< T>::type;
+
+template< typename T>
+CE sgned< T> with_sign( T x)
+{
+        using signed_T = sgned< T>;
+        CE signed_T signed_T_min = std::numeric_limits< signed_T>::min();
+
+        if( x >= signed_T_min )
+                return signed_T( x - signed_T_min) + signed_T_min;
+        return signed_T( x);
+}
+
+struct Angle;
+struct Turn;
+
+#pragma region // Angle{}
+// Угол
+struct Angle
+{
+        friend struct Turn; 
+
+        using This = Angle;
+        using Val  = unsigned int;
+
+private:
+CE S    Val     semiturn = std::numeric_limits< Val>::max() / 2 + 1;
+CE S    Val     eps      = 8;
+        Val     val;
+
+CE      This(        Val  v): val( v) {}
+CE      This( sgned< Val> v): val( v) {}
+
+public:
+CE E    This( double radian)
+        : val( sgned< longer< Val>>(  radian * (semiturn/π))
+           & std::numeric_limits< Val>::max()
+           )
+        {}
+CE E    This( Turn ъ&);
+
+CE E    OP double() ъ { return val * (π/semiturn); };
+
+//CE      bool    OP ==( Thisъ& r) ъ { return val == r.val; }
+CE      bool    OP ==( Thisъ& r) ъ { return ce::abs( with_sign( val - r.val)) < eps; }
+#pragma warning( push)
+#pragma warning( disable: 4146)
+CE      This    OP - (         ) ъ { return -val;        }
+#pragma warning( pop)
+CE      Val     OP / ( Thisъ& r) ъ { return val / r.val; }
+CE      This    OP / ( double r) ъ { return sgned< Val>( double( val) / r ); }
+CE      This    OP / ( int    r) ъ { return               with_sign( val) / r  ; }
+
+CE      This&   OP +=( Thisъ& r) { val += r.val; return *this; }
+CE      This&   OP -=( Thisъ& r) { val -= r.val; return *this; }
+CE      This&   OP *=( Val    r) { val *=     r; return *this; }
+CE      This&   OP /=( Val    r) { val /=     r; return *this; }
+CE      This&   OP *=( double r) { val *=     r; return *this; }
+CE      This&   OP *=( int    r) { val *=     r; return *this; }
+void    print( std::ostream& os) ъ
+        {
+                os << ( val * (180./semiturn)) << '°';
+        };
+
+CE F    This    OP ""ᵒ( unsigned long long);
+CE F    This    OP ""ᵒ( long double       );
+};
+
+OPS_ARITH( Angle )
+
+CE Angle OP ""ᵒ ( unsigned long long x)
+{
+        return Angle::Val( x * Angle::semiturn / 180
+                         & std::numeric_limits< Angle::Val>::max()
+                         );
+};
+
+CE Angle OP ""ᵒ ( long double x)
+{
+        return Angle::Val( longer< Angle::Val>( long double( Angle::semiturn) / 180 * x)
+                         & std::numeric_limits< Angle::Val>::max()
+                         );
+};
+
+void test_Angle()
+{
+#pragma warning( push)
+#pragma warning( disable: 4146)
+        static_assert( Angle(-π   ) ==  180ᵒ, "" );
+        static_assert( Angle(-π/ 2) ==  270ᵒ, "" );
+        static_assert( Angle(5π   ) ==  180ᵒ, "" );
+        static_assert( Angle(5π/ 2) ==   90ᵒ, "" );
+        static_assert( Angle(3π/ 2) ==  270ᵒ, "" );
+        static_assert( Angle(3π/ 2) ==  -90ᵒ, "" );
+        static_assert( Angle( π   ) ==  180ᵒ, "" );
+        static_assert( Angle( π/ 2) ==   90ᵒ, "" );
+        static_assert( Angle( π/ 3) ==   60ᵒ, "" );
+        static_assert( Angle( π/ 4) ==   45ᵒ, "" );
+        static_assert( Angle( π/ 5) ==   36ᵒ, "" );
+        static_assert( Angle( π/ 6) ==   30ᵒ, "" );
+        static_assert( Angle( π/ 8) == 22.5ᵒ, "" );
+        static_assert( Angle( π/ 9) ==   20ᵒ, "" );
+        static_assert( Angle( π/10) ==   18ᵒ, "" );
+        static_assert( Angle( π/12) ==   15ᵒ, "" );
+        static_assert( Angle( π/15) ==   12ᵒ, "" );
+        static_assert( Angle( π/16) ==11.25ᵒ, "" );
+        static_assert( Angle( π/18) ==   10ᵒ, "" );
+        static_assert( Angle( π/20) ==    9ᵒ, "" );
+        static_assert( Angle( π/24) ==  7.5ᵒ, "" );
+        static_assert( Angle( π/25) ==  7.2ᵒ, "" );
+        static_assert( Angle(π/180) ==    1ᵒ, "" );
+        static_assert(        -180ᵒ ==  180ᵒ, "" );
+        static_assert(    1ᵒ - 359ᵒ ==    2ᵒ, "" );
+        static_assert(  1.5ᵒ + 2.5ᵒ ==    4ᵒ, "" );
+        static_assert(  1.5ᵒ *  10  ==   15ᵒ, "" );
+        static_assert(          15ᵒ == 1.5ᵒ * 10 , "" );
+        static_assert(  -10ᵒ *  -3  ==   30ᵒ, "" );
+        static_assert(   30ᵒ /  -3  ==  -10ᵒ, "" );
+        static_assert(   30ᵒ /  -3. ==  -10ᵒ, "" );
+        static_assert(  -90ᵒ *  -3  ==  270ᵒ, "" );
+        static_assert(    1ᵒ *  10  ==   10ᵒ, "" );
+        static_assert(   36ᵒ *  10  ==    0ᵒ, "" );
+        static_assert(  359ᵒ *  10  ==  -10ᵒ, "" );
+        static_assert(   90ᵒ /  10ᵒ ==    9 , "" );
+        static_assert(  -90ᵒ /  10ᵒ ==   27 , "" );
+        //static_assert( -90ᵒ  / -10ᵒ ==    9 , "" );
+#pragma warning( pop)
+}
+#pragma endregion
+
+#pragma region // Turn{}
+// Оборот
+struct Turn
+{
+        friend struct Angle; 
+
+        using This = Turn;
+        using Val  = sgned< longer< Angle::Val>>;
+
+private:
+CE S    Val     one_turn = Val( std::numeric_limits< unsgned< shorter< Val>>>::max()) + 1;
+        Val     val;
+
+CE      This( Val v): val( v) {}
+
+public:
+//CE      This( shorter< Val> turn): val( turn * one_turn) {}
+CE E    This( Angle  x ): val( x.val       ) {}
+CE E    This( double x ): val( x * one_turn) {}
+
+CE      OP Val    () ъ { return        val  / one_turn; };
+CE      OP int    () ъ { return        val  / one_turn; };
+CE      OP unsigned int    () ъ { return        val  / one_turn; };
+CE      OP double () ъ { return double(val) / one_turn; };
+
+CE      This    OP - (         ) ъ { return { -val };    }
+CE      Val     OP / ( Thisъ& r) ъ { return val / r.val; }
+CE      This    OP / ( double r) ъ { return double( val) / r; }
+
+CE      This&   OP +=( Thisъ& r) { val += r.val; return *this; }
+CE      This&   OP -=( Thisъ& r) { val -= r.val; return *this; }
+CE      This&   OP *=( Val    r) { val *=     r; return *this; }
+CE      This&   OP /=( Val    r) { val /=     r; return *this; }
+CE      This&   OP *=( int    r) { val *=     r; return *this; }
+CE      This&   OP /=( int    r) { val /=     r; return *this; }
+CE      This&   OP *=( double r) { val *=     r; return *this; }
+void    print( std::ostream& os) ъ
+        {
+                os << double( val) << " об";
+        };
+
+CE F    This    OP ""turn ( unsigned long long);
+CE F    This    OP ""turn ( long double       );
+};
+
+OPS_ARITH( Turn )
+
+CE Turn OP ""turn ( unsigned long long x) { return x * Turn::one_turn; };
+CE Turn OP ""turn ( long double        x) { return x * Turn::one_turn; };
+CE auto OP ""τ    ( unsigned long long x) { return OP ""turn ( x); };
+CE auto OP ""τ    ( long double        x) { return OP ""turn ( x); };
+
+CE Angle::Angle( Turn ъ &x): val( x.val)
+{}
+
+void test_Turn()
+{
+#pragma warning( push)
+#pragma warning( disable: 4146)
+        static_assert( Angle( Turn( 123ᵒ)) ==  123ᵒ, "" );
+        static_assert( Angle(         2τ ) ==    0ᵒ, "" );
+        static_assert( Angle(      1.25τ ) ==   90ᵒ, "" );
+        static_assert( Angle(     -1.25τ ) ==  -90ᵒ, "" );
+        static_assert( Angle(  0.1τ * 10 ) ==    0ᵒ, "" );
+        static_assert( int( Turn(180ᵒ-120ᵒ)*160) == 26, "" );
+#pragma warning( pop)
+}
+#pragma endregion
+
 #pragma region // Комплексные Числа ℂ{}, ℂ₁{}
 
 // Комплексное Число, но есть нюанс...
 struct ℂ
 {
-protected:
-        double r, i;
-public:
         using This = ℂ;
 
+protected:
+        double  r, i;
+CE      void    swap() { double r1 = r; r = i; i = r1; }
+
+public:
 CE      This( 𝐈                 ): r( 0 ), i( 1 ) {}
 CE E    This( double s          ): r( s ), i( 0 ) {}
 CE      This( double r, double i): r( r ), i( i ) {}
@@ -180,15 +429,15 @@ CE      double  re   () ъ { return r            ; } // действительн
 CE      double  im   () ъ { return i            ; } // мнимая часть
 CE      double  ℜ   () ъ { return r            ; } // действительная часть
 CE      double  ℑ    () ъ { return i            ; } // мнимая часть
-CE      double  arg  () ъ
+CE      Angle   arg  () ъ
         {
-                if( r > +0. ) return atan( i / r );
-                if( r < -0. ) return atan( i / r ) + π;
+                if( r > +0. ) return Angle( atan( i / r ));
+                if( r < -0. ) return Angle( atan( i / r ) + π);
 
-                if( i > +0. ) return π/2;
-                if( i < -0. ) return 3π/2;
+                if( i > +0. ) return Angle( π/2 );
+                if( i < -0. ) return Angle( 3π/2);
 
-                return NAN;
+                return Angle( NAN);
         }
 CE      This    sqrt () ъ // корень
         {
@@ -224,8 +473,8 @@ CE      This&   OP -=( double s) { r -= s;         return *this; }
 CE      This&   OP *=( double s) { r *= s; i *= s; return *this; } // Умножение на скаляр
 CE      This&   OP /=( double s) { r /= s; i /= s; return *this; } // Деление на скаляр
 
-CE      This&   OP *=( 𝐈 ъ& ) { swap( r, i); r = -r; return *this; } // Умножение на мнимую
-CE      This&   OP /=( 𝐈 ъ& ) { swap( r, i); i = -i; return *this; } // Деление на мнимую
+CE      This&   OP *=( 𝐈 ъ&    ) { swap(); r = -r; return *this; } // Умножение на мнимую
+CE      This&   OP /=( 𝐈 ъ&    ) { swap(); i = -i; return *this; } // Деление на мнимую
 
 // на время представим, что наше комплексное число это вектор...
 CE      double  OP , ( Thisъ& v) ъ { return  r*v.r + i*v.i; } // Скалярное произведение (Inner product)
@@ -236,17 +485,13 @@ CE      double  OP ^ ( Thisъ& v) ъ { return  r*v.i - i*v.r; } // Псевдо�
                 static This last = { NAN, NAN };
                 if( last != *this )
                 {
-                        os << std::setw(8) << this->r << std::setw(12) << this->i << '\n';
+                        os << std::setw(8) << r << std::setw(12) << i << '\n';
                         last = *this;
                 }
         };
 };
 
-OPS_C( +, plus,  ℂ )
-OPS_Ȼ( -, minus, ℂ )
-OPS_C( *, mul,   ℂ )
-OPS_Ȼ( /, div,   ℂ )
-
+OPS_ARITH( ℂ )
 
 // Единичное Комплексное Число (Unit Complex Number). ℂ₁ = {𝑧 ∈ ℂ: |𝑧| = 1}
 struct ℂ₁: public ℂ
@@ -265,6 +510,8 @@ public:
 CE      This( 𝐈          ): Super( 0., 1.                       ) {}
 CE E    This( Super ъ& z ): Super( z / z.abs()                  ) {}
 CE E    This( double sin ): Super( ce::sqrt( 1. - sin*sin), sin ) {}        
+CE      This( Angle    𝜑 ): Super( cos( double( 𝜑)), sin( double( 𝜑))) {} // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
+
         // к-тор берет КЧ и делает из него ЕКЧ, попутно деля *p на длину этого КЧ.
 CE      This( Super ъ& z, double *p )
         : Super( z)
@@ -293,8 +540,6 @@ CE      This    sqrt () ъ
         }
         FN( abs²); FN( abs); FN( conj); FN( recip); FN( ψarg); FN( sqrt);
 
-CE F    This    cis  ( double 𝜑 );// { return { cos(𝜑), sin(𝜑)}; } // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
-
 CE      bool    OP > ( Thisъ& z) ъ { return ψarg() > z.ψarg();}
 CE      bool    OP < ( Thisъ& z) ъ { return ψarg() < z.ψarg();}
 
@@ -302,20 +547,15 @@ CE      This&   OP *=( Thisъ& z) { Super::OP *=( z); return *this; } // ЕКЧ*
 CE      This&   OP /=( Thisъ& z) { return (*this *= z.conj());     } // ЕКЧ/ЕКЧ = ЕКЧ, при этом само деление вырождено
 CE      ℂ&     OP /=( ℂ ъ& z ) { return ℂ::OP /=( z); }            // КЧ/ЕКЧ = КЧ
 
-CE      This&   OP *=( 𝐈 ъ& ) { swap( r, i); r = -r; return *this; } // Умножение на мнимую
-CE      This&   OP /=( 𝐈 ъ& ) { swap( r, i); i = -i; return *this; } // Деление на мнимую
+CE      This&   OP *=( 𝐈 ъ&    ) { swap(); r = -r; return *this; } // Умножение на мнимую
+CE      This&   OP /=( 𝐈 ъ&    ) { swap(); i = -i; return *this; } // Деление на мнимую
 
 static  Thisъ 𝟏;
 static  Thisъ 𝐢;
 };
 
-OPS_C( *, mul,   ℂ₁)
-OPS_Ȼ( /, div,   ℂ₁)
-
-
-// фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
-CE ℂ₁ cis( double 𝜑 )
-{       return { cos(𝜑), sin(𝜑) }; }
+OPS_C( *, mul, ℂ₁)
+OPS_Ȼ( /, div, ℂ₁)
 
 CE ℂ& ℂ::OP /=( ℂ₁ ъ& n) 
 {       return (*this *= n.recip()); }
@@ -518,17 +758,17 @@ CE      ℂ tangent_point( ℂ ъ& p ) ъ
                 }
         };
 
-        void print00( std::ostream &os, double α1, double α2 ) ъ
+        void print00( std::ostream &os, Angle α1, Angle α2 ) ъ
         {
-                double Δα = α2 - α1; // угол поворота
+                Angle Δα = α2 - α1; // угол поворота
                 // кол. сегментов, на круг - 160 сегментов, примерно
-                int segments = static_cast< int>( round( abs( Δα / 2π * 160)));
-                ℂ₁ m̂ = cis( Δα / segments);   // ед. век. повернутый на угол Δα/segments
+                unsigned segments = Turn( Δα * 160);
+                ℂ₁ m̂( Δα / segments);   // ед. век. повернутый на угол Δα/segments
 
-                ℂ  r̅ = abs( R) * cis( α1);    // радиус от центра окружности
+                ℂ  r̅ = abs( R) * ℂ₁( α1);    // радиус от центра окружности
                 ℂ  s̅ = m̂*r̅ - r̅;               // сегментик, которым рисуем окружность
                 r̅ += o̅;
-                for( ; segments >= 0; --segments )
+                for( ; segments --> 0;)
                 {
                         os << r̅;
                         r̅ += ( s̅ *= m̂ );
