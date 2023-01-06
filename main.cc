@@ -17,12 +17,20 @@
 #define Thisъ   This ъ
 #define ㄥ      *cis
 
+using std::declval;
+using std::ostream;
+using std::false_type;
+using std::true_type;
+using std::enable_if_t;
+using std::is_integral;
+using std::numeric_limits;
+
 #define FN( f) constexpr friend auto f( const This& r) -> decltype( r.f()) { return r.f(); }
 
 template< typename T
-        , typename = decltype( std::declval<T>().print( std::declval< std::ostream&>()) )
+        , typename = decltype( declval<T>().print( declval< ostream&>()) )
         >
-std::ostream& operator <<( std::ostream& os, const T& t)
+ostream& operator <<( ostream& os, const T& t)
 {
         t.print( os);
         return os;
@@ -33,31 +41,23 @@ std::ostream& operator <<( std::ostream& os, const T& t)
 template< typename... >
 using void_t = void;
 
-template< typename T, typename U, typename = void> struct exist_oper_plus_eq:  std::false_type {};
-template< typename T, typename U, typename = void> struct exist_oper_minus_eq: std::false_type {};
-template< typename T, typename U, typename = void> struct exist_oper_mul_eq:   std::false_type {};
-template< typename T, typename U, typename = void> struct exist_oper_div_eq:   std::false_type {};
+template< typename T, typename U, typename = void> struct exist_oper_plus_eq    : false_type {};
+template< typename T, typename U, typename = void> struct exist_oper_minus_eq   : false_type {};
+template< typename T, typename U, typename = void> struct exist_oper_mul_eq     : false_type {};
+template< typename T, typename U, typename = void> struct exist_oper_div_eq     : false_type {};
 
 template< typename T, typename U>
-struct exist_oper_plus_eq < T, U, void_t< decltype( std::declval< T>() += std::declval< U>())> >
-        : std::true_type
-{};
+struct exist_oper_plus_eq < T, U, void_t< decltype( declval< T>() += declval< U>())> >  : true_type {};
 template< typename T, typename U>
-struct exist_oper_minus_eq< T, U, void_t< decltype( std::declval< T>() -= std::declval< U>())> >
-        : std::true_type
-{};
+struct exist_oper_minus_eq< T, U, void_t< decltype( declval< T>() -= declval< U>())> >  : true_type {};
 template< typename T, typename U>
-struct exist_oper_mul_eq  < T, U, void_t< decltype( std::declval< T>() *= std::declval< U>())> >
-        : std::true_type
-{};
+struct exist_oper_mul_eq  < T, U, void_t< decltype( declval< T>() *= declval< U>())> >  : true_type {};
 template< typename T, typename U>
-struct exist_oper_div_eq  < T, U, void_t< decltype( std::declval< T>() /= std::declval< U>())> >
-        : std::true_type
-{};
+struct exist_oper_div_eq  < T, U, void_t< decltype( declval< T>() /= declval< U>())> >  : true_type {};
 
 /*
 #define OP_B( o, name, U )                                                        \
-template< typename T> CE std::enable_if_t<   exist_oper_##name##_eq< U, T>::value    \
+template< typename T> CE enable_if_t<   exist_oper_##name##_eq< U, T>::value    \
 , U> operator o ( U u, const T& t) { u o##= t; return u; };
 */
 
@@ -72,8 +72,8 @@ std::remove_reference_t< decltype( u o##= t )>  \
 // U o= T -> T o U
 #define OP_C( o, name, U )                                      \
 template< typename T>                                           \
-CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
-                   &&  exist_oper_##name##_eq< U, T>::value     \
+CE enable_if_t<    !exist_oper_##name##_eq< T, U>::value        \
+                &&  exist_oper_##name##_eq< U, T>::value        \
 , U> operator o ( const T& t, const U& u)                       \
 {                                                               \
         U u1( u);                                               \
@@ -85,8 +85,8 @@ CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
 // U o= T → T o U
 #define OP_Ȼ( o, name, U )                                      \
 template< typename T>                                           \
-CE std::enable_if_t<  !exist_oper_##name##_eq< T, U>::value     \
-                   &&  exist_oper_##name##_eq< U, T>::value     \
+CE enable_if_t<    !exist_oper_##name##_eq< T, U>::value        \
+                &&  exist_oper_##name##_eq< U, T>::value        \
 , U> operator o ( const T& t, const U& u)                       \
 {                                                               \
         U t1( t);                                               \
@@ -118,15 +118,26 @@ struct ℂ₁;
 
 namespace ce
 {
-        CE double    abs( double    a) { return a >= 0 ? a : -a; }
-        CE int       abs( int       a) { return a >= 0 ? a : -a; };
-        CE long      abs( long      a) { return a >= 0 ? a : -a; };
-        CE long long abs( long long a) { return a >= 0 ? a : -a; };
-//        CE __int64   abs( __int64   a) { return a >= 0 ? a : -a; };
+        template< typename T>
+        enable_if_t< std::is_floating_point< T>::value, T>
+CE      abs( T x)
+        {
+                return x >= 0 ?  x
+                              : -x;
+        }
 
+        template< typename T>
+        enable_if_t< is_integral< T>::value && std::is_signed< T>::value, T>
+CE      abs( T x)
+        {
+                // x ⩾ 0 → mask = 0
+                // x < 0 → mask = -1
+                const T mask = x >> sizeof( T) * CHAR_BIT - 1;
+                return (x ^ mask) - mask;
+        };
 
         //https://gist.github.com/alexshtf/eb5128b3e3e143187794
-        double CE sqrt_Newton_Raphson( double r, double curr, double prev)
+CE      double sqrt_Newton_Raphson( double r, double curr, double prev)
         {
                 return curr == prev ? curr
                                     : sqrt_Newton_Raphson( r, 0.5 * (curr + r / curr), curr);
@@ -135,14 +146,14 @@ namespace ce
         /*
         * Constexpr version of the square root
         * \return 
-        *   - For a finite and non-negative value of "r", returns an approximation for the square root of "r"; 
+        *   - For x finite and non-negative value of "r", returns an approximation for the square root of "r"; 
         *   - Otherwise, returns NaN
         */
-        double CE sqrt( double r)
+CE      double sqrt( double r)
         {
-                return r >= 0 && r < std::numeric_limits< double>::infinity()
+                return r >= 0 && r < numeric_limits< double>::infinity()
                         ? sqrt_Newton_Raphson( r, r, 0)
-                        : std::numeric_limits< double>::quiet_NaN();
+                        : numeric_limits< double>::quiet_NaN();
         }
 }
 
@@ -160,7 +171,7 @@ CE inline bool eq  ( double a, double b)
 {
         if( (a -= b) < 0 )
                 a = -a;
-        return a < 1e-14; // epsilon ≠ std::numeric_limits< double>::epsilon();
+        return a < 1e-14; // epsilon ≠ numeric_limits< double>::epsilon();
 }
 
 namespace impl
@@ -186,14 +197,14 @@ namespace impl
         template<       > struct shorter<  int64_t>{ using type =  int32_t; };
         //template<       > struct shorter< int128_t>{ using type =  int64_t; };
 
-        template<class T> struct sgned           {                        };
+        template<class T> struct sgned           {                       };
         template<       > struct sgned<  uint8_t>{ using type =  int8_t; };
         template<       > struct sgned< uint16_t>{ using type = int16_t; };
         template<       > struct sgned< uint32_t>{ using type = int32_t; };
         template<       > struct sgned< uint64_t>{ using type = int64_t; };
         //template<       > struct sgned<uint128_t>{ using type = int128_t; };
 
-        template<class T> struct unsgned          {                        };
+        template<class T> struct unsgned          {                             };
         template<       > struct unsgned< char   >{ using type = unsigned char; };
         template<       > struct unsgned<  int8_t>{ using type =  uint8_t;      };
         template<       > struct unsgned< int16_t>{ using type = uint16_t;      };
@@ -206,15 +217,17 @@ template< typename T> using shorter = typename impl::shorter< T>::type;
 template< typename T> using sgned   = typename impl::sgned  < T>::type;
 template< typename T> using unsgned = typename impl::unsgned< T>::type;
 
+// constexpr'сный способ превращения T в signed T
 template< typename T>
 CE sgned< T> with_sign( T x)
 {
-        using signed_T = sgned< T>;
-        CE signed_T signed_T_min = std::numeric_limits< signed_T>::min();
+        // это if нужен для осчастливливания constexpr'а,
+        // надеюсь, оптимизатор его выкинет
+        CE sgned< T> min = numeric_limits< sgned< T>>::min();
+        if( x >= min )
+                return sgned< T>( x - min) + min;
 
-        if( x >= signed_T_min )
-                return signed_T( x - signed_T_min) + signed_T_min;
-        return signed_T( x);
+        return sgned< T>( x);
 }
 
 struct Angle;
@@ -230,7 +243,7 @@ struct Angle
         using Val  = unsigned int;
 
 private:
-CE S    Val     semiturn = std::numeric_limits< Val>::max() / 2 + 1;
+CE S    Val     semiturn = numeric_limits< Val>::max() / 2 + 1;
 CE S    Val     eps      = 8;
         Val     val;
 
@@ -240,7 +253,7 @@ CE      This( sgned< Val> v): val( v) {}
 public:
 CE E    This( double radian)
         : val( sgned< longer< Val>>(  radian * (semiturn/π))
-           & std::numeric_limits< Val>::max()
+           & numeric_limits< Val>::max()
            )
         {}
 CE E    This( Turn ъ&);
@@ -255,15 +268,18 @@ CE      This    OP - (         ) ъ { return -val;        }
 #pragma warning( pop)
 CE      Val     OP / ( Thisъ& r) ъ { return val / r.val; }
 CE      This    OP / ( double r) ъ { return sgned< Val>( double( val) / r ); }
-CE      This    OP / ( int    r) ъ { return               with_sign( val) / r  ; }
+        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
+CE      This    OP / ( A_INT  r) ъ { return           with_sign( val) / r  ; }
 
 CE      This&   OP +=( Thisъ& r) { val += r.val; return *this; }
 CE      This&   OP -=( Thisъ& r) { val -= r.val; return *this; }
-CE      This&   OP *=( Val    r) { val *=     r; return *this; }
-CE      This&   OP /=( Val    r) { val /=     r; return *this; }
+        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
+CE      This&   OP *=( A_INT  r) { val *=     r; return *this; }
+        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
+CE      This&   OP /=( A_INT  r) { val /=     r; return *this; }
 CE      This&   OP *=( double r) { val *=     r; return *this; }
-CE      This&   OP *=( int    r) { val *=     r; return *this; }
-void    print( std::ostream& os) ъ
+
+void    print( ostream& os) ъ
         {
                 os << ( val * (180./semiturn)) << '°';
         };
@@ -272,19 +288,23 @@ CE F    This    OP ""ᵒ( unsigned long long);
 CE F    This    OP ""ᵒ( long double       );
 };
 
-OPS_ARITH( Angle )
+//OPS_ARITH( Angle )
+OPS_C( +, plus,  Angle)
+OPS_Ȼ( -, minus, Angle)
+OPS_C( *, mul,   Angle)
+
 
 CE Angle OP ""ᵒ ( unsigned long long x)
 {
         return Angle::Val( x * Angle::semiturn / 180
-                         & std::numeric_limits< Angle::Val>::max()
+                         & numeric_limits< Angle::Val>::max()
                          );
 };
 
 CE Angle OP ""ᵒ ( long double x)
 {
         return Angle::Val( longer< Angle::Val>( long double( Angle::semiturn) / 180 * x)
-                         & std::numeric_limits< Angle::Val>::max()
+                         & numeric_limits< Angle::Val>::max()
                          );
 };
 
@@ -344,7 +364,7 @@ struct Turn
         using Val  = sgned< longer< Angle::Val>>;
 
 private:
-CE S    Val     one_turn = Val( std::numeric_limits< unsgned< shorter< Val>>>::max()) + 1;
+CE S    Val     one_turn = Val( numeric_limits< unsgned< shorter< Val>>>::max()) + 1;
         Val     val;
 
 CE      This( Val v): val( v) {}
@@ -354,9 +374,8 @@ public:
 CE E    This( Angle  x ): val( x.val       ) {}
 CE E    This( double x ): val( x * one_turn) {}
 
-CE      OP Val    () ъ { return        val  / one_turn; };
-CE      OP int    () ъ { return        val  / one_turn; };
-CE      OP unsigned int    () ъ { return        val  / one_turn; };
+        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
+CE      OP A_INT  () ъ { return        val  / one_turn; };
 CE      OP double () ъ { return double(val) / one_turn; };
 
 CE      This    OP - (         ) ъ { return { -val };    }
@@ -365,12 +384,12 @@ CE      This    OP / ( double r) ъ { return double( val) / r; }
 
 CE      This&   OP +=( Thisъ& r) { val += r.val; return *this; }
 CE      This&   OP -=( Thisъ& r) { val -= r.val; return *this; }
-CE      This&   OP *=( Val    r) { val *=     r; return *this; }
-CE      This&   OP /=( Val    r) { val /=     r; return *this; }
-CE      This&   OP *=( int    r) { val *=     r; return *this; }
-CE      This&   OP /=( int    r) { val /=     r; return *this; }
+        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
+CE      This&   OP *=( A_INT  r) { val *=     r; return *this; }
+        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
+CE      This&   OP /=( A_INT  r) { val /=     r; return *this; }
 CE      This&   OP *=( double r) { val *=     r; return *this; }
-void    print( std::ostream& os) ъ
+void    print( ostream& os) ъ
         {
                 os << double( val) << " об";
         };
@@ -480,7 +499,7 @@ CE      This&   OP /=( 𝐈 ъ&    ) { swap(); i = -i; return *this; } // Дел
 CE      double  OP , ( Thisъ& v) ъ { return  r*v.r + i*v.i; } // Скалярное произведение (Inner product)
 CE      double  OP ^ ( Thisъ& v) ъ { return  r*v.i - i*v.r; } // Псевдоскалярное, Векторное, косое произведение (Outer, cross product)
 
-        void print( std::ostream& os) ъ
+        void print( ostream& os) ъ
         {
                 static This last = { NAN, NAN };
                 if( last != *this )
@@ -630,7 +649,7 @@ CE F    double dist( Line ъ& l, ℂ ъ& r̅) { return l.dist( r̅); }
 CE F    ℂ OP >>( ℂ ъ& r̅, Line ъ& l ) { return l.proj( r̅); }
 
 /*
-friend  std::ostream& OP<<( std::ostream &os, Line ъ& obj )
+friend  ostream& OP<<( ostream &os, Line ъ& obj )
         {
                 os << ℂ( 0.0, obj.p/obj.n.i)
                    << ℂ( obj.p/obj.n.r, 0.0);
@@ -674,7 +693,7 @@ CE      Segment( Line ъ& l, ℂ ъ& p1_, ℂ ъ& p2_ )
         // обмен концов (рисоваться будет в другую сторону)
 CE      Segment OP - () ъ { return Segment( this->p̅2, this->p̅1 ); }
 
-        void print( std::ostream& os) ъ
+        void print( ostream& os) ъ
         {
                 os << p̅1 << p̅2;
         };
@@ -741,7 +760,7 @@ CE      ℂ tangent_point( ℂ ъ& p ) ъ
                 return o̅ - n̂*R;
         };
 
-        void print( std::ostream &os) ъ
+        void print( ostream &os) ъ
         {
                 CE ъ int segs = 40;
 
@@ -758,7 +777,7 @@ CE      ℂ tangent_point( ℂ ъ& p ) ъ
                 }
         };
 
-        void print00( std::ostream &os, Angle α1, Angle α2 ) ъ
+        void print00( ostream &os, Angle α1, Angle α2 ) ъ
         {
                 Angle Δα = α2 - α1; // угол поворота
                 // кол. сегментов, на круг - 160 сегментов, примерно
@@ -782,7 +801,7 @@ void   Circle_test()
         CE ℂ o2( 5, 5);
 
         //CE auto b = Circle( o1, -2).tangent( Circle( o2, -2));
-        //CE auto a = Line( ℂ( 0.6,  0.8), 5);
+        //CE auto x = Line( ℂ( 0.6,  0.8), 5);
 
         static_assert( Circle( o1,  2).tangent( Circle( o2,  2)) == Line( ℂ( 1.0,   .0), 3), "");
         static_assert( Circle( o1, -2).tangent( Circle( o2,  2)) == Line( ℂ( 0.6,  0.8), 5), "");
@@ -836,7 +855,7 @@ CE      bool OP ==( Arc ъ& a) ъ
                         ;
         }
 
-        void print( std::ostream &os) ъ
+        void print( ostream &os) ъ
         {
                 CE ъ int segs = 160;
 
