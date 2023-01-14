@@ -23,6 +23,9 @@ using std::false_type;
 using std::true_type;
 using std::enable_if_t;
 using std::is_integral;
+using std::is_floating_point;
+using std::make_signed;
+using std::make_unsigned;
 using std::numeric_limits;
 
 #define FN( f) constexpr friend auto f( const This& r) -> decltype( r.f()) { return r.f(); }
@@ -107,6 +110,9 @@ OPS_Ȼ( -, minus, type )        \
 OPS_C( *, mul,   type )        \
 OPS_Ȼ( /, div,   type )
 
+#define T_INT template< typename INT  , typename = enable_if_t< is_integral      < INT  >::value>> constexpr
+#define T_FLT template< typename FLOAT, typename = enable_if_t< is_floating_point< FLOAT>::value>> constexpr
+
 #pragma endregion
 
 
@@ -118,23 +124,11 @@ struct ℂ₁;
 
 namespace ce
 {
-        template< typename T>
-        enable_if_t< std::is_floating_point< T>::value, T>
-CE      abs( T x)
+T_FLT   FLOAT abs( FLOAT x)
         {
-                return x >= 0 ?  x
-                              : -x;
+                return x > 0 ?  x
+                             : -x;
         }
-
-        template< typename T>
-        enable_if_t< is_integral< T>::value && std::is_signed< T>::value, T>
-CE      abs( T x)
-        {
-                // x ⩾ 0 → mask = 0
-                // x < 0 → mask = -1
-                const T mask = x >> sizeof( T) * CHAR_BIT - 1;
-                return (x ^ mask) - mask;
-        };
 
         //https://gist.github.com/alexshtf/eb5128b3e3e143187794
 CE      double sqrt_Newton_Raphson( double r, double curr, double prev)
@@ -156,6 +150,16 @@ CE      double sqrt( double r)
                         : numeric_limits< double>::quiet_NaN();
         }
 }
+
+template< typename T>
+enable_if_t< is_integral< T>::value && std::is_signed< T>::value,
+T> CE nabs( T x)
+{
+        // x ⩾ 0 → mask = 0
+        // x < 0 → mask = -1
+        const T mask = x >> (sizeof( T) * CHAR_BIT - 1);
+        return mask - (x ^ mask);
+};
 
 CE ъ double π = 3.14159265358979323846;
 #pragma warning( disable: 4455)
@@ -196,38 +200,22 @@ namespace impl
         template<       > struct shorter<  int32_t>{ using type =  int16_t; };
         template<       > struct shorter<  int64_t>{ using type =  int32_t; };
         //template<       > struct shorter< int128_t>{ using type =  int64_t; };
-
-        template<class T> struct sgned           {                       };
-        template<       > struct sgned<  uint8_t>{ using type =  int8_t; };
-        template<       > struct sgned< uint16_t>{ using type = int16_t; };
-        template<       > struct sgned< uint32_t>{ using type = int32_t; };
-        template<       > struct sgned< uint64_t>{ using type = int64_t; };
-        //template<       > struct sgned<uint128_t>{ using type = int128_t; };
-
-        template<class T> struct unsgned          {                             };
-        template<       > struct unsgned< char   >{ using type = unsigned char; };
-        template<       > struct unsgned<  int8_t>{ using type =  uint8_t;      };
-        template<       > struct unsgned< int16_t>{ using type = uint16_t;      };
-        template<       > struct unsgned< int32_t>{ using type = uint32_t;      };
-        template<       > struct unsgned< int64_t>{ using type = uint64_t;      };
-        //template<       > struct unsgned<int128_t>{ using type = uint128_t; };
 }
 template< typename T> using longer  = typename impl::longer < T>::type;
 template< typename T> using shorter = typename impl::shorter< T>::type;
-template< typename T> using sgned   = typename impl::sgned  < T>::type;
-template< typename T> using unsgned = typename impl::unsgned< T>::type;
+template< typename T> using sgned   = typename make_signed  < T>::type;
+template< typename T> using unsgned = typename make_unsigned< T>::type;
 
 // constexpr'сный способ превращения T в signed T
-template< typename T>
-CE sgned< T> with_sign( T x)
+T_INT sgned< INT> with_sign( INT x)
 {
         // это if нужен для осчастливливания constexpr'а,
         // надеюсь, оптимизатор его выкинет
-        CE sgned< T> min = numeric_limits< sgned< T>>::min();
+        CE sgned< INT> min = numeric_limits< sgned< INT>>::min();
         if( x >= min )
-                return sgned< T>( x - min) + min;
+                return sgned< INT>( x - min) + min;
 
-        return sgned< T>( x);
+        return sgned< INT>( x);
 }
 
 struct Angle;
@@ -243,8 +231,9 @@ struct Angle
         using Val  = unsigned int;
 
 private:
-CE S    Val     semiturn = numeric_limits< Val>::max() / 2 + 1;
-CE S    Val     eps      = 8;
+CE S    Val     semiturn = Val(1) << (sizeof( Val) * CHAR_BIT - 1);
+CE S    sgned< Val>  eps = 8;
+
         Val     val;
 
 CE      This(        Val  v): val( v) {}
@@ -253,30 +242,28 @@ CE      This( sgned< Val> v): val( v) {}
 public:
 CE E    This( double radian)
         : val( sgned< longer< Val>>(  radian * (semiturn/π))
-           & numeric_limits< Val>::max()
-           )
+             & numeric_limits< Val>::max()
+             )
         {}
 CE E    This( Turn ъ&);
 
 CE E    OP double() ъ { return val * (π/semiturn); };
 
 //CE      bool    OP ==( Thisъ& r) ъ { return val == r.val; }
-CE      bool    OP ==( Thisъ& r) ъ { return ce::abs( with_sign( val - r.val)) < eps; }
+CE      bool    OP ==( Thisъ& r) ъ { return nabs( with_sign( val - r.val)) > -eps; }
 #pragma warning( push)
 #pragma warning( disable: 4146)
 CE      This    OP - (         ) ъ { return -val;        }
 #pragma warning( pop)
 CE      Val     OP / ( Thisъ& r) ъ { return val / r.val; }
 CE      This    OP / ( double r) ъ { return sgned< Val>( double( val) / r ); }
-        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
-CE      This    OP / ( A_INT  r) ъ { return           with_sign( val) / r  ; }
+T_INT   This    OP / ( INT    r) ъ { return           with_sign( val) / r  ; }
+CE      This    OP / ( unsigned r) ъ { return                 val  / r  ; }
 
 CE      This&   OP +=( Thisъ& r) { val += r.val; return *this; }
 CE      This&   OP -=( Thisъ& r) { val -= r.val; return *this; }
-        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
-CE      This&   OP *=( A_INT  r) { val *=     r; return *this; }
-        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
-CE      This&   OP /=( A_INT  r) { val /=     r; return *this; }
+T_INT   This&   OP *=( INT    r) { val *=     r; return *this; }
+T_INT   This&   OP /=( INT    r) { val /=     r; return *this; }
 CE      This&   OP *=( double r) { val *=     r; return *this; }
 
 void    print( ostream& os) ъ
@@ -308,7 +295,7 @@ CE Angle OP ""ᵒ ( long double x)
                          );
 };
 
-void test_Angle()
+CE void test_Angle()
 {
 #pragma warning( push)
 #pragma warning( disable: 4146)
@@ -374,8 +361,7 @@ public:
 CE E    This( Angle  x ): val( x.val       ) {}
 CE E    This( double x ): val( x * one_turn) {}
 
-        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
-CE      OP A_INT  () ъ { return        val  / one_turn; };
+T_INT   OP INT    () ъ { return        val  / one_turn; };
 CE      OP double () ъ { return double(val) / one_turn; };
 
 CE      This    OP - (         ) ъ { return { -val };    }
@@ -384,10 +370,8 @@ CE      This    OP / ( double r) ъ { return double( val) / r; }
 
 CE      This&   OP +=( Thisъ& r) { val += r.val; return *this; }
 CE      This&   OP -=( Thisъ& r) { val -= r.val; return *this; }
-        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
-CE      This&   OP *=( A_INT  r) { val *=     r; return *this; }
-        template< typename A_INT, typename = enable_if_t< is_integral< A_INT>::value>>
-CE      This&   OP /=( A_INT  r) { val /=     r; return *this; }
+T_INT   This&   OP *=( INT    r) { val *=     r; return *this; }
+T_INT   This&   OP /=( INT    r) { val /=     r; return *this; }
 CE      This&   OP *=( double r) { val *=     r; return *this; }
 void    print( ostream& os) ъ
         {
@@ -476,14 +460,17 @@ CE      bool    OP !=( Thisъ& z) ъ { return !eq( this->r, z.r ) || !eq( this->
 
 CE      This&   OP +=( Thisъ& z) { r+=z.r; i+=z.i; return *this; }
 CE      This&   OP -=( Thisъ& z) { r-=z.r; i-=z.i; return *this; }
-CE      This&   OP *=( Thisъ& z) // Умножение векторов как комплексных чисел
+CE      This    OP * ( Thisъ& z) ъ
         {
-                This rot90 = {-i, r}; // поворот на 90° *this;
-                rot90 *= z.i;
-                *this *= z.r;
-                *this += rot90;
-                return *this;
+                double a = (r + i) * (z.r + z.i);
+                double b = r * z.r;
+                double c = i * z.i;
+
+                return  {     b - c
+                        , a - b - c
+                        };
         }
+CE      This&   OP *=( Thisъ& z) { return ( *this = *this * z);  }
 CE      This&   OP /=( Thisъ& z) { return (*this *= z.recip());  } // Деление КЧ на другое КЧ
 CE      This&   OP /=( ℂ₁ ъ& n);                                  // Деление КЧ на единичное КЧ дает КЧ
 
