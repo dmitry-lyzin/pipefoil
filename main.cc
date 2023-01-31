@@ -7,15 +7,19 @@
 #include <cassert>
 #include <type_traits>
 
+#pragma warning( disable: 4455)
+
 #define CE      constexpr
 #define E       explicit
-#define F       friend
-#define S       static
+#define FRIEND  constexpr friend
+#define STATIC  constexpr static
 #define OP      operator
-#define ъ       const
-#define This    ​ // этот тип
-#define Thisъ   This ъ
+#define C       const
+#define Self    ​ // этот тип
+#define CSelf   C Self
+#define self    *this
 #define ㄥ      *cis
+#define FN( f)  constexpr friend auto f( const Self& r) -> decltype( r.f()) { return r.f(); }
 
 using std::declval;
 using std::ostream;
@@ -27,104 +31,127 @@ using std::is_floating_point;
 using std::make_signed;
 using std::make_unsigned;
 using std::numeric_limits;
+using std::remove_reference_t;
+using std::cout;
+using std::cerr;
+using std::size;
 
-#define FN( f) constexpr friend auto f( const This& r) -> decltype( r.f()) { return r.f(); }
+#pragma region // template operators
+
+template< typename T>
+CE auto lastbit = sizeof( T) * CHAR_BIT - 1;
 
 template< typename T
         , typename = decltype( declval<T>().print( declval< ostream&>()) )
-        >
+>
 ostream& operator <<( ostream& os, const T& t)
 {
         t.print( os);
         return os;
 }
 
-#pragma region // template operators
-
 template< typename... >
 using void_t = void;
 
-template< typename T, typename U, typename = void> struct exist_oper_plus_eq    : false_type {};
-template< typename T, typename U, typename = void> struct exist_oper_minus_eq   : false_type {};
-template< typename T, typename U, typename = void> struct exist_oper_mul_eq     : false_type {};
-template< typename T, typename U, typename = void> struct exist_oper_div_eq     : false_type {};
-
+template< char o, typename T, typename U, typename = void>
+struct is_oper_o_eq                                                                     :false_type {};
 template< typename T, typename U>
-struct exist_oper_plus_eq < T, U, void_t< decltype( declval< T>() += declval< U>())> >  : true_type {};
+struct is_oper_o_eq< '+', T, U, void_t< decltype( declval< T>() += declval< U>())> >    : true_type {};
 template< typename T, typename U>
-struct exist_oper_minus_eq< T, U, void_t< decltype( declval< T>() -= declval< U>())> >  : true_type {};
+struct is_oper_o_eq< '-', T, U, void_t< decltype( declval< T>() -= declval< U>())> >    : true_type {};
 template< typename T, typename U>
-struct exist_oper_mul_eq  < T, U, void_t< decltype( declval< T>() *= declval< U>())> >  : true_type {};
+struct is_oper_o_eq< '*', T, U, void_t< decltype( declval< T>() *= declval< U>())> >    : true_type {};
 template< typename T, typename U>
-struct exist_oper_div_eq  < T, U, void_t< decltype( declval< T>() /= declval< U>())> >  : true_type {};
-
-/*
-#define OP_B( o, name, U )                                                        \
-template< typename T> CE enable_if_t<   exist_oper_##name##_eq< U, T>::value    \
-, U> operator o ( U u, const T& t) { u o##= t; return u; };
-*/
+struct is_oper_o_eq< '/', T, U, void_t< decltype( declval< T>() /= declval< U>())> >    : true_type {};
 
 // U o= T → U o T
-#define OP_B( o, U )                            \
-template< typename T>                           \
-CE auto operator o ( U u, const T& t) ->        \
-std::remove_reference_t< decltype( u o##= t )>  \
+#define OP_B( o, U )                                            \
+template< typename T                                            \
+        , typename = enable_if_t< is_oper_o_eq< *#o, U, T>::value>   \
+        >                                                       \
+CE U operator o ( U u, const T& t)                              \
 { u o##= t; return u; };
 
 // коммутативный оператор с каким-то типом
-// U o= T -> T o U
-#define OP_C( o, name, U )                                      \
-template< typename T>                                           \
-CE enable_if_t<    !exist_oper_##name##_eq< T, U>::value        \
-                &&  exist_oper_##name##_eq< U, T>::value        \
-, U> operator o ( const T& t, const U& u)                       \
+// U o= T → T o U
+#define OP_C( o, U )                                            \
+template< typename T                                            \
+        , typename = enable_if_t< !is_oper_o_eq< *#o, T, U>::value>   \
+        >                                                       \
+CE auto operator o ( const T& t, const U& u)                    \
+        -> remove_reference_t< decltype( U(u) o##= t)>          \
 {                                                               \
-        U u1( u);                                               \
-        u1 o##= t;                                              \
-        return u1;                                              \
+        return U(u) o##= t;                                     \
 };
 
 // некоммутативный оператор с каким-то типом
 // U o= T → T o U
-#define OP_Ȼ( o, name, U )                                      \
-template< typename T>                                           \
-CE enable_if_t<    !exist_oper_##name##_eq< T, U>::value        \
-                &&  exist_oper_##name##_eq< U, T>::value        \
-, U> operator o ( const T& t, const U& u)                       \
+#define OP_Ȼ( o, U )                                            \
+template< typename T                                            \
+        , typename = enable_if_t< !is_oper_o_eq< *#o, T, U>::value>   \
+        >                                                       \
+CE auto operator o ( const T& t, const U& u)                    \
+        -> remove_reference_t< decltype( U(t) o##= u)>          \
 {                                                               \
-        U t1( t);                                               \
-        t1 o##= u;                                              \
-        return t1;                                              \
+        return U(t) o##= u;                                     \
 };
 
 // оба варианта коммутативного оператора с каким-то типом
-#define OPS_C( oper, oper_name, type ) OP_B( oper, type ) OP_C( oper, oper_name, type )
+#define OPS_C( oper, type ) OP_B( oper, type ) OP_C( oper, type )
 
 // оба варианта некоммутативного оператора с каким-то типом
-#define OPS_Ȼ( oper, oper_name, type ) OP_B( oper, type ) OP_Ȼ( oper, oper_name, type )
+#define OPS_Ȼ( oper, type ) OP_B( oper, type ) OP_Ȼ( oper, type )
+
 
 // создать арифметические операторы (+-*/) для type
-#define OPS_ARITH( type)       \
-OPS_C( +, plus,  type )        \
-OPS_Ȼ( -, minus, type )        \
-OPS_C( *, mul,   type )        \
-OPS_Ȼ( /, div,   type )
+#define OPS_ARITH( type)\
+OPS_C( +, type )        \
+OPS_Ȼ( -, type )        \
+OPS_C( *, type )        \
+OPS_Ȼ( /, type )
 
-#define T_INT template< typename INT  , typename = enable_if_t< is_integral      < INT  >::value>> constexpr
-#define T_FLT template< typename FLOAT, typename = enable_if_t< is_floating_point< FLOAT>::value>> constexpr
+#define TINT template< typename INT  , typename = enable_if_t< is_integral      < INT  >::value>> constexpr
+#define TFLT template< typename FLOAT, typename = enable_if_t< is_floating_point< FLOAT>::value>> constexpr
+
+namespace impl
+{
+        template<class T> struct longer           {                        };
+        template<       > struct longer< char    >{ using type = short;    };
+        template<       > struct longer<  uint8_t>{ using type = uint16_t; };
+        template<       > struct longer< uint16_t>{ using type = uint32_t; };
+        template<       > struct longer< uint32_t>{ using type = uint64_t; };
+        //template<       > struct longer< uint64_t>{ using type = uint128_t;};
+        template<       > struct longer<   int8_t>{ using type =  int16_t; };
+        template<       > struct longer<  int16_t>{ using type =  int32_t; };
+        template<       > struct longer<  int32_t>{ using type =  int64_t; };
+        //template<       > struct longer<  int64_t>{ using type =  int128_t;};
+
+        template<class T> struct shorter           {                        };
+        template<       > struct shorter< uint16_t>{ using type =  uint8_t; };
+        template<       > struct shorter< uint32_t>{ using type = uint16_t; };
+        template<       > struct shorter< uint64_t>{ using type = uint32_t; };
+        //template<       > struct shorter<uint128_t>{ using type = uint64_t; };
+        template<       > struct shorter<  int16_t>{ using type =   int8_t; };
+        template<       > struct shorter<  int32_t>{ using type =  int16_t; };
+        template<       > struct shorter<  int64_t>{ using type =  int32_t; };
+        //template<       > struct shorter< int128_t>{ using type =  int64_t; };
+}
+template< typename T> using longer  = typename impl::longer < T>::type;
+template< typename T> using shorter = typename impl::shorter< T>::type;
+template< typename T> using sgned   = typename make_signed  < T>::type;
+template< typename T> using unsgned = typename make_unsigned< T>::type;
 
 #pragma endregion
 
-
-ъ class Ф{} ф; // флаг для конструкторов из сырых данных
-ъ class 𝐈{} 𝐢; // самая мнимая единица на свете (настолько мнимая, что даже память не занимает!)
+C class Ф{} ф; // флаг для конструкторов из сырых данных
+C class 𝐈{} 𝐢; // самая мнимая единица на свете (настолько мнимая, что даже память не занимает!)
 
 struct ℂ;
 struct ℂ₁;
 
 namespace ce
 {
-T_FLT   FLOAT abs( FLOAT x)
+TFLT    FLOAT abs( FLOAT x)
         {
                 return x > 0 ?  x
                              : -x;
@@ -157,17 +184,17 @@ T> CE nabs( T x)
 {
         // x ⩾ 0 → mask = 0
         // x < 0 → mask = -1
-        const T mask = x >> (sizeof( T) * CHAR_BIT - 1);
+        const T mask = x >> lastbit< T>;
         return mask - (x ^ mask);
 };
 
-CE ъ double π = 3.14159265358979323846;
-#pragma warning( disable: 4455)
-CE ъ double operator ""π  ( unsigned long long a) { return π * a;                }
-CE ъ double operator ""⅟²(        long double a) { return ce::sqrt( double(a)); }
-CE ъ double operator ""⅟²( unsigned long long a) { return ce::sqrt( double(a)); }
+CE C double π = 3.14159265358979323846;
+CE C double operator ""π  (        long double a) { return π * a;                }
+CE C double operator ""π  ( unsigned long long a) { return π * a;                }
+CE C double operator ""⅟²(        long double a) { return ce::sqrt( double(a)); }
+CE C double operator ""⅟²( unsigned long long a) { return ce::sqrt( double(a)); }
 
-CE inline double  ²( double a)
+CE inline double ²( double a)
 {
         return a * a;
 }
@@ -178,40 +205,12 @@ CE inline bool eq  ( double a, double b)
         return a < 1e-14; // epsilon ≠ numeric_limits< double>::epsilon();
 }
 
-namespace impl
-{
-        template<class T> struct longer           {                        };
-        template<       > struct longer< char    >{ using type = short;    };
-        template<       > struct longer<  uint8_t>{ using type = uint16_t; };
-        template<       > struct longer< uint16_t>{ using type = uint32_t; };
-        template<       > struct longer< uint32_t>{ using type = uint64_t; };
-        //template<       > struct longer< uint64_t>{ using type = uint128_t;};
-        template<       > struct longer<   int8_t>{ using type =  int16_t; };
-        template<       > struct longer<  int16_t>{ using type =  int32_t; };
-        template<       > struct longer<  int32_t>{ using type =  int64_t; };
-        //template<       > struct longer<  int64_t>{ using type =  int128_t;};
-
-        template<class T> struct shorter           {                        };
-        template<       > struct shorter< uint16_t>{ using type =  uint8_t; };
-        template<       > struct shorter< uint32_t>{ using type = uint16_t; };
-        template<       > struct shorter< uint64_t>{ using type = uint32_t; };
-        //template<       > struct shorter<uint128_t>{ using type = uint64_t; };
-        template<       > struct shorter<  int16_t>{ using type =   int8_t; };
-        template<       > struct shorter<  int32_t>{ using type =  int16_t; };
-        template<       > struct shorter<  int64_t>{ using type =  int32_t; };
-        //template<       > struct shorter< int128_t>{ using type =  int64_t; };
-}
-template< typename T> using longer  = typename impl::longer < T>::type;
-template< typename T> using shorter = typename impl::shorter< T>::type;
-template< typename T> using sgned   = typename make_signed  < T>::type;
-template< typename T> using unsgned = typename make_unsigned< T>::type;
-
 // constexpr'сный способ превращения T в signed T
-T_INT sgned< INT> with_sign( INT x)
+TINT sgned< INT> sign_cast( INT x)
 {
-        // это if нужен для осчастливливания constexpr'а,
-        // надеюсь, оптимизатор его выкинет
         CE sgned< INT> min = numeric_limits< sgned< INT>>::min();
+        // этот if нужен для осчастливливания constexpr'а,
+        // надеюсь, оптимизатор его выкинет
         if( x >= min )
                 return sgned< INT>( x - min) + min;
 
@@ -225,73 +224,66 @@ struct Turn;
 // Угол
 struct Angle
 {
+#pragma warning( push)
+#pragma warning( disable: 4146)
+
         friend struct Turn; 
 
-        using This = Angle;
+        using Self = Angle;
         using Val  = unsigned int;
 
 private:
-CE S    Val     semiturn = Val(1) << (sizeof( Val) * CHAR_BIT - 1);
-CE S    sgned< Val>  eps = 8;
-
         Val     val;
+STATIC  Val     semiturn = Val(1) << lastbit< Val>;
+STATIC  sgned< Val>  eps = 8;
 
-CE      This(        Val  v): val( v) {}
-CE      This( sgned< Val> v): val( v) {}
+TINT    Self         ( INT        v ): val( v) {}
 
 public:
-CE E    This( double radian)
-        : val( sgned< longer< Val>>(  radian * (semiturn/π))
-             & numeric_limits< Val>::max()
-             )
-        {}
-CE E    This( Turn ъ&);
+CE E    Self         ( C Turn&      );
+CE E    Self         ( double radian): val(   sgned< longer< Val>>(  radian * (semiturn/π))
+                                            & Val( -1 )
+                                          ) {}
+CE E OP double       (              ) C { return val * (π/semiturn); };
+//CE    bool    OP ==( CSelf& r) C { return val == r.val; }
+CE      bool    OP ==( CSelf&     r ) C { return nabs( sign_cast( val - r.val)) > -eps; }
+CE      Self    OP - (              ) C { return -val;        }
+CE      Val     OP / ( CSelf&     r ) C { return val / r.val; }
+CE      Self    OP / ( double     r ) C { return sgned< Val>( double( val) / r ); }
+TINT    Self    OP / ( INT        r ) C { return           sign_cast( val) / r  ; }
+CE      Self    OP / ( unsigned   r ) C { return                      val  / r  ; }
 
-CE E    OP double() ъ { return val * (π/semiturn); };
-
-//CE      bool    OP ==( Thisъ& r) ъ { return val == r.val; }
-CE      bool    OP ==( Thisъ& r) ъ { return nabs( with_sign( val - r.val)) > -eps; }
-#pragma warning( push)
-#pragma warning( disable: 4146)
-CE      This    OP - (         ) ъ { return -val;        }
-#pragma warning( pop)
-CE      Val     OP / ( Thisъ& r) ъ { return val / r.val; }
-CE      This    OP / ( double r) ъ { return sgned< Val>( double( val) / r ); }
-T_INT   This    OP / ( INT    r) ъ { return           with_sign( val) / r  ; }
-CE      This    OP / ( unsigned r) ъ { return                 val  / r  ; }
-
-CE      This&   OP +=( Thisъ& r) { val += r.val; return *this; }
-CE      This&   OP -=( Thisъ& r) { val -= r.val; return *this; }
-T_INT   This&   OP *=( INT    r) { val *=     r; return *this; }
-T_INT   This&   OP /=( INT    r) { val /=     r; return *this; }
-CE      This&   OP *=( double r) { val *=     r; return *this; }
-
-void    print( ostream& os) ъ
+CE      Self&   OP +=( CSelf&     r )   { val += r.val; return self; }
+CE      Self&   OP -=( CSelf&     r )   { val -= r.val; return self; }
+TINT    Self&   OP *=( INT        r )   { val *= r    ; return self; }
+TINT    Self&   OP /=( INT        r )   { val /= r    ; return self; }
+CE      Self&   OP *=( double     r )   { val *= r    ; return self; }
+        void    print( ostream&   os) C
         {
                 os << ( val * (180./semiturn)) << '°';
         };
 
-CE F    This    OP ""ᵒ( unsigned long long);
-CE F    This    OP ""ᵒ( long double       );
+FRIEND  Self    OP ""ᵒ( unsigned long long);
+FRIEND  Self    OP ""ᵒ( long double       );
+#pragma warning( pop)
 };
 
-//OPS_ARITH( Angle )
-OPS_C( +, plus,  Angle)
-OPS_Ȼ( -, minus, Angle)
-OPS_C( *, mul,   Angle)
+OPS_C( +, Angle)
+OPS_Ȼ( -, Angle)
+OPS_C( *, Angle)
 
 
 CE Angle OP ""ᵒ ( unsigned long long x)
 {
         return Angle::Val( x * Angle::semiturn / 180
-                         & numeric_limits< Angle::Val>::max()
+                         & Angle::Val( -1)
                          );
 };
 
 CE Angle OP ""ᵒ ( long double x)
 {
         return Angle::Val( longer< Angle::Val>( long double( Angle::semiturn) / 180 * x)
-                         & numeric_limits< Angle::Val>::max()
+                         & Angle::Val( -1)
                          );
 };
 
@@ -347,49 +339,45 @@ struct Turn
 {
         friend struct Angle; 
 
-        using This = Turn;
+        using Self = Turn;
         using Val  = sgned< longer< Angle::Val>>;
 
 private:
-CE S    Val     one_turn = Val( numeric_limits< unsgned< shorter< Val>>>::max()) + 1;
+STATIC  Val     one_turn = Val(1) << (lastbit< unsgned< Angle::Val>> + 1);
         Val     val;
-
-CE      This( Val v): val( v) {}
-
+CE      Self            ( Ф, Val v): val( v           ) {}
 public:
-//CE      This( shorter< Val> turn): val( turn * one_turn) {}
-CE E    This( Angle  x ): val( x.val       ) {}
-CE E    This( double x ): val( x * one_turn) {}
+CE      Self            ( Angle  x): val( x.val       ) {}
+CE      Self            ( double x): val( x * one_turn) {}
+TINT    Self            ( INT    x): val( x * one_turn) {}
+CE   OP double          (         ) C { return double(val) / one_turn; }
+TINT OP INT             (         ) C { return        val  / one_turn; }
 
-T_INT   OP INT    () ъ { return        val  / one_turn; };
-CE      OP double () ъ { return double(val) / one_turn; };
+CE      Self    OP -    (         ) C { return { ф, -val }; }
+CE      Val     OP /    ( CSelf& r) C { return val / r.val; }
+CE      Self    OP /    ( double r) C { return double( self) / r; }
 
-CE      This    OP - (         ) ъ { return { -val };    }
-CE      Val     OP / ( Thisъ& r) ъ { return val / r.val; }
-CE      This    OP / ( double r) ъ { return double( val) / r; }
-
-CE      This&   OP +=( Thisъ& r) { val += r.val; return *this; }
-CE      This&   OP -=( Thisъ& r) { val -= r.val; return *this; }
-T_INT   This&   OP *=( INT    r) { val *=     r; return *this; }
-T_INT   This&   OP /=( INT    r) { val /=     r; return *this; }
-CE      This&   OP *=( double r) { val *=     r; return *this; }
-void    print( ostream& os) ъ
+CE      Self&   OP +=   ( CSelf& r)   { val += r.val; return self; }
+CE      Self&   OP -=   ( CSelf& r)   { val -= r.val; return self; }
+TINT    Self&   OP *=   ( INT    r)   { val *= r    ; return self; }
+TINT    Self&   OP /=   ( INT    r)   { val /= r    ; return self; }
+CE      Self&   OP *=   ( double r)   { val *= r    ; return self; }
+        void    print   ( ostream& os) C
         {
-                os << double( val) << " об";
+                os << double( val) << " turn";
         };
-
-CE F    This    OP ""turn ( unsigned long long);
-CE F    This    OP ""turn ( long double       );
 };
 
-OPS_ARITH( Turn )
+OPS_C( +, Turn )
+OPS_Ȼ( -, Turn )
+OPS_C( *, Turn )
 
-CE Turn OP ""turn ( unsigned long long x) { return x * Turn::one_turn; };
-CE Turn OP ""turn ( long double        x) { return x * Turn::one_turn; };
+CE Turn OP ""turn ( unsigned long long x) { return         x ; };
+CE Turn OP ""turn ( long double        x) { return double( x); };
 CE auto OP ""τ    ( unsigned long long x) { return OP ""turn ( x); };
 CE auto OP ""τ    ( long double        x) { return OP ""turn ( x); };
 
-CE Angle::Angle( Turn ъ &x): val( x.val)
+CE Angle::Angle( Turn C &x): val( x.val)
 {}
 
 void test_Turn()
@@ -411,28 +399,27 @@ void test_Turn()
 // Комплексное Число, но есть нюанс...
 struct ℂ
 {
-        using This = ℂ;
+        using Self = ℂ;
 
 protected:
         double  r, i;
 CE      void    swap() { double r1 = r; r = i; i = r1; }
 
 public:
-CE      This( 𝐈                 ): r( 0 ), i( 1 ) {}
-CE E    This( double s          ): r( s ), i( 0 ) {}
-CE      This( double r, double i): r( r ), i( i ) {}
+CE      Self( 𝐈                 ): r( 0 ), i( 1 ) {}
+CE E    Self( double s          ): r( s ), i( 0 ) {}
+CE      Self( double r, double i): r( r ), i( i ) {}
 
-CE      double  abs² () ъ { return  r*r + i*i   ; } // абсолютная величина в квадрате
-CE      double  abs  () ъ { return ce::sqrt(abs²());} // абсолютная величина
-CE      This    OP - () ъ { return { -r, -i }   ; } // унарный минус
-CE      This    OP ~ () ъ { return {  r, -i }   ; } // Сопряжённое (conjugate) число
-CE      This    conj () ъ { return {  r, -i }   ; } // Сопряжённое (conjugate) число
-CE      This    recip() ъ { This z( r, -i); z /= abs²(); return z; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
-CE      double  re   () ъ { return r            ; } // действительная часть
-CE      double  im   () ъ { return i            ; } // мнимая часть
-CE      double  ℜ   () ъ { return r            ; } // действительная часть
-CE      double  ℑ    () ъ { return i            ; } // мнимая часть
-CE      Angle   arg  () ъ
+CE      double  abs² () C { return  r*r + i*i      ;} // абсолютная величина в квадрате
+CE      double  abs  () C { return ce::sqrt(abs²());} // абсолютная величина
+CE      Self    OP - () C { return { -r, -i }      ;} // унарный минус
+CE      Self    conj () C { return {  r, -i }      ;} // Сопряжённое (conjugate) число
+CE      Self    recip() C { return conj() /= abs²();} // 1/z - обратная величина (reciprocal, multiplicative inverse)
+CE      double  re   () C { return r               ;} // действительная часть
+CE      double  im   () C { return i               ;} // мнимая часть
+CE      double  ℜ   () C { return r               ;} // действительная часть
+CE      double  ℑ    () C { return i               ;} // мнимая часть
+CE      Angle   arg  () C
         {
                 if( r > +0. ) return Angle( atan( i / r ));
                 if( r < -0. ) return Angle( atan( i / r ) + π);
@@ -442,10 +429,10 @@ CE      Angle   arg  () ъ
 
                 return Angle( NAN);
         }
-CE      This    sqrt () ъ // корень
+CE      Self    sqrt () C // корень
         {
                 double abs1 = abs();
-                This rv = { ce::sqrt( (abs1 + r)/2 )
+                Self rv = { ce::sqrt( (abs1 + r)/2 )
                           , ce::sqrt( (abs1 - r)/2 )
                           };
                 if( i < 0 )
@@ -455,44 +442,44 @@ CE      This    sqrt () ъ // корень
 
         FN( abs²); FN( abs); FN( conj); FN( recip); FN( re); FN( im); FN( ℜ); FN( ℑ); FN( arg); FN( sqrt);
 
-CE      bool    OP ==( Thisъ& z) ъ { return  eq( this->r, z.r ) &&  eq( this->i, z.i ); }
-CE      bool    OP !=( Thisъ& z) ъ { return !eq( this->r, z.r ) || !eq( this->i, z.i ); }
+CE      bool    OP ==( CSelf& z) C { return  eq( this->r, z.r ) &&  eq( this->i, z.i ); }
+CE      bool    OP !=( CSelf& z) C { return !eq( this->r, z.r ) || !eq( this->i, z.i ); }
 
-CE      This&   OP +=( Thisъ& z) { r+=z.r; i+=z.i; return *this; }
-CE      This&   OP -=( Thisъ& z) { r-=z.r; i-=z.i; return *this; }
-CE      This    OP * ( Thisъ& z) ъ
+CE      Self&   OP +=( CSelf& z)   { r+=z.r; i+=z.i; return self; }
+CE      Self&   OP -=( CSelf& z)   { r-=z.r; i-=z.i; return self; }
+CE      Self    OP * ( CSelf& z) C
         {
                 double a = (r + i) * (z.r + z.i);
                 double b = r * z.r;
                 double c = i * z.i;
 
-                return  {     b - c
+                return  { b - c
                         , a - b - c
                         };
         }
-CE      This&   OP *=( Thisъ& z) { return ( *this = *this * z);  }
-CE      This&   OP /=( Thisъ& z) { return (*this *= z.recip());  } // Деление КЧ на другое КЧ
-CE      This&   OP /=( ℂ₁ ъ& n);                                  // Деление КЧ на единичное КЧ дает КЧ
+CE      Self&   OP *=( CSelf& z)   { return (self  = self * z );  }
+CE      Self&   OP /=( CSelf& z)   { return (self *= z.recip());  } // Деление КЧ на другое КЧ
+CE      Self&   OP /=( C ℂ₁& n);                                   // Деление КЧ на единичное КЧ дает КЧ
 
-CE      This&   OP +=( double s) { r += s;         return *this; }
-CE      This&   OP -=( double s) { r -= s;         return *this; }
-CE      This&   OP *=( double s) { r *= s; i *= s; return *this; } // Умножение на скаляр
-CE      This&   OP /=( double s) { r /= s; i /= s; return *this; } // Деление на скаляр
+CE      Self&   OP +=( double s)   { r += s;         return self; }
+CE      Self&   OP -=( double s)   { r -= s;         return self; }
+CE      Self&   OP *=( double s)   { r *= s; i *= s; return self; } // Умножение на скаляр
+CE      Self&   OP /=( double s)   { r /= s; i /= s; return self; } // Деление на скаляр
 
-CE      This&   OP *=( 𝐈 ъ&    ) { swap(); r = -r; return *this; } // Умножение на мнимую
-CE      This&   OP /=( 𝐈 ъ&    ) { swap(); i = -i; return *this; } // Деление на мнимую
+CE      Self&   OP *=( C 𝐈&    )   { swap(); r = -r; return self; } // Умножение на мнимую
+CE      Self&   OP /=( C 𝐈&    )   { swap(); i = -i; return self; } // Деление на мнимую
 
 // на время представим, что наше комплексное число это вектор...
-CE      double  OP , ( Thisъ& v) ъ { return  r*v.r + i*v.i; } // Скалярное произведение (Inner product)
-CE      double  OP ^ ( Thisъ& v) ъ { return  r*v.i - i*v.r; } // Псевдоскалярное, Векторное, косое произведение (Outer, cross product)
+CE      double  OP , ( CSelf& v) C { return  r*v.r + i*v.i; } // Скалярное произведение (Inner product)
+CE      double  OP ^ ( CSelf& v) C { return  r*v.i - i*v.r; } // Псевдоскалярное, Векторное, косое произведение (Outer, cross product)
 
-        void print( ostream& os) ъ
+        void    print( ostream& os) C
         {
-                static This last = { NAN, NAN };
-                if( last != *this )
+                static Self last = { NAN, NAN };
+                if( last != self )
                 {
                         os << std::setw(8) << r << std::setw(12) << i << '\n';
-                        last = *this;
+                        last = self;
                 }
         };
 };
@@ -502,24 +489,24 @@ OPS_ARITH( ℂ )
 // Единичное Комплексное Число (Unit Complex Number). ℂ₁ = {𝑧 ∈ ℂ: |𝑧| = 1}
 struct ℂ₁: public ℂ
 {
-        using This  = ℂ₁;
+        using Self  = ℂ₁;
         using Super = ℂ;
 
 #ifndef NDEBUG
-CE      This( Ф, double r, double i): Super( r, i) {}
+CE      Self( Ф, double r, double i): Super( r, i) {}
 #endif
 private:
-CE      This( Ф, Super ъ& z     ): Super( z   ) {}
-CE      This( double r, double i): Super( r, i) {}
+CE      Self( Ф, C Super& z     ): Super( z   ) {}
+CE      Self( double r, double i): Super( r, i) {}
 
 public:
-CE      This( 𝐈          ): Super( 0., 1.                       ) {}
-CE E    This( Super ъ& z ): Super( z / z.abs()                  ) {}
-CE E    This( double sin ): Super( ce::sqrt( 1. - sin*sin), sin ) {}        
-CE      This( Angle    𝜑 ): Super( cos( double( 𝜑)), sin( double( 𝜑))) {} // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
+CE      Self( 𝐈          ): Super( 0., 1.                       ) {}
+CE E    Self( C Super& z ): Super( z / z.abs()                  ) {}
+CE E    Self( double sin ): Super( ce::sqrt( 1. - sin*sin), sin ) {}        
+CE      Self( Angle    𝜑 ): Super( cos( double( 𝜑)), sin( double( 𝜑))) {} // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
 
         // к-тор берет КЧ и делает из него ЕКЧ, попутно деля *p на длину этого КЧ.
-CE      This( Super ъ& z, double *p )
+CE      Self( C Super& z, double *p )
         : Super( z)
         {
                 assert( p);
@@ -528,14 +515,13 @@ CE      This( Super ъ& z, double *p )
                 *p               /= len; 
         }
 
-CE      double  abs² () ъ { return     1.   ; } // абсолютная величина в квадрате = 1
-CE      double  abs  () ъ { return     1.   ; } // абсолютная величина = 1, этож единичное число ;)
-CE      This    OP - () ъ { return {-r, -i }; } // унарный минус (ЕКЧ = -ЕКЧ)
-CE      This    OP ~ () ъ { return { r, -i }; } // Сопряжённое (conjugate) число
-CE      This    conj () ъ { return { r, -i }; } // Сопряжённое (conjugate) число
-CE      This    recip() ъ { return { r, -i }; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
-CE      double  ψarg () ъ { double x1 = r + 1.; return i>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
-CE      This    sqrt () ъ
+CE      double  abs² () C { return     1.   ; } // абсолютная величина в квадрате = 1
+CE      double  abs  () C { return     1.   ; } // абсолютная величина = 1, этож единичное число ;)
+CE      Self    OP - () C { return {-r, -i }; } // унарный минус (ЕКЧ = -ЕКЧ)
+CE      Self    conj () C { return { r, -i }; } // Сопряжённое (conjugate) число
+CE      Self    recip() C { return { r, -i }; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
+CE      double  ψarg () C { double x1 = r + 1.; return i>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
+CE      Self    sqrt () C
         {
                 double i0 = ce::sqrt( (1. - r)/2 );
                 if( i < 0 )
@@ -546,33 +532,33 @@ CE      This    sqrt () ъ
         }
         FN( abs²); FN( abs); FN( conj); FN( recip); FN( ψarg); FN( sqrt);
 
-CE      bool    OP > ( Thisъ& z) ъ { return ψarg() > z.ψarg();}
-CE      bool    OP < ( Thisъ& z) ъ { return ψarg() < z.ψarg();}
+CE      bool    OP > ( CSelf& z) C { return ψarg() > z.ψarg();}
+CE      bool    OP < ( CSelf& z) C { return ψarg() < z.ψarg();}
 
-CE      This&   OP *=( Thisъ& z) { Super::OP *=( z); return *this; } // ЕКЧ*ЕКЧ = ЕКЧ
-CE      This&   OP /=( Thisъ& z) { return (*this *= z.conj());     } // ЕКЧ/ЕКЧ = ЕКЧ, при этом само деление вырождено
-CE      ℂ&     OP /=( ℂ ъ& z ) { return ℂ::OP /=( z); }            // КЧ/ЕКЧ = КЧ
+CE      Self&   OP *=( CSelf& z)   { Super::OP *=( z); return self; } // ЕКЧ*ЕКЧ = ЕКЧ
+CE      Self&   OP /=( CSelf& z)   { return (self *= z.conj());     } // ЕКЧ/ЕКЧ = ЕКЧ, при этом само деление вырождено
+CE      ℂ&     OP /=( C ℂ& z )   { return ℂ::OP /=( z); }           // КЧ/ЕКЧ = КЧ
 
-CE      This&   OP *=( 𝐈 ъ&    ) { swap(); r = -r; return *this; } // Умножение на мнимую
-CE      This&   OP /=( 𝐈 ъ&    ) { swap(); i = -i; return *this; } // Деление на мнимую
+CE      Self&   OP *=( C 𝐈&    )   { swap(); r = -r; return self; } // Умножение на мнимую
+CE      Self&   OP /=( C 𝐈&    )   { swap(); i = -i; return self; } // Деление на мнимую
 
-static  Thisъ 𝟏;
-static  Thisъ 𝐢;
+static  CSelf   𝟏;
+static  CSelf   𝐢;
 };
 
-OPS_C( *, mul, ℂ₁)
-OPS_Ȼ( /, div, ℂ₁)
+OPS_C( *, ℂ₁)
+OPS_Ȼ( /, ℂ₁)
 
-CE ℂ& ℂ::OP /=( ℂ₁ ъ& n) 
-{       return (*this *= n.recip()); }
+CE ℂ& ℂ::OP /=( C ℂ₁& n) 
+{       return (self *= n.recip()); }
 
 // комплексная единица (единичная, естественно)
-CE ъ ℂ₁ ℂ₁::𝟏 = { 1., 0. };
+CE C ℂ₁ ℂ₁::𝟏 = { 1., 0. };
 // комплексная мнимая единица
-CE ъ ℂ₁ ℂ₁::𝐢 = { 0., 1. };
+CE C ℂ₁ ℂ₁::𝐢 = { 0., 1. };
 
 // единица
-CE ъ ℂ₁ 𝟏 = ℂ₁::𝟏;
+CE C ℂ₁ 𝟏 = ℂ₁::𝟏;
 
 CE ℂ OP ""𝐢 ( unsigned long long a) { return { 0., double(a)}; }
 CE ℂ OP ""𝐢 (        long double a) { return { 0., double(a)}; }
@@ -585,7 +571,7 @@ void   ℂ_test()
 
         // это просто должно скомпилиться
         CE auto a0 = ℂ₁( 0.1 ) * ℂ( 0, 1 );
-        CE ℂ₁ u0 = 𝐢;        
+        CE ℂ₁ u0 = 𝐢;
         CE ℂ₁ u1 = 𝟏 / 𝐢;
         CE ℂ  u2 = ℂ₁( 0.1 ) *= 𝐢;
         CE ℂ₁ u3 = ℂ₁( 0.1 );
@@ -601,10 +587,13 @@ void   ℂ_test()
 
         CE ℂ₁ a = ℂ₁( 0.1);
         static_assert( a / ℂ(3, -2) == ℂ( 0.2142278701015276898, 0.1761519134010184617), "");
-        static_assert( a      > 𝟏 && !( a      < 𝟏), "");
-        static_assert(~a      > 𝟏 && !(~a      < 𝟏), "");
-        static_assert(~a      > a && !(~a      < a), "");
+        static_assert(      a > 𝟏 && !(      a < 𝟏), "");
+        static_assert( conj(a)> 𝟏 && !( conj(a)< 𝟏), "");
+        static_assert( conj(a)> a && !( conj(a)< a), "");
         static_assert( a*𝐢*𝐢*𝐢 > a && !( a*𝐢*𝐢*𝐢 < a), "");
+
+        static_assert( arg(0 + 𝐢) ==  90ᵒ, "");
+        static_assert( arg(0 - 𝐢) == 270ᵒ, "");
 }
 #pragma endregion
 
@@ -616,27 +605,27 @@ struct Line
         // Прямая, заданой нормальным уравнением (n̅, r̅) = 𝐶 т.е. 𝐴𝑥ᵣ + 𝐵𝑦ᵣ = 𝐶, n̅ = {𝐴, 𝐵}, |n̅| > 0
         // \param[in] n̅ - вектор, нормальный к прямой
         // \param[in] 𝐶 - скалярный параметр
-CE      Line( ℂ  ъ& n̅, double 𝐶 ): p( 𝐶 ), n̂( n̅, &p ) {}
+CE      Line( C  ℂ& n̅, double 𝐶 ): p( 𝐶 ), n̂( n̅, &p ) {}
         // Прямая, задана нормированным уравнением (n̂, r̅) = 𝑝, |n̂| = 1, 𝑝 ⩾ 0
         // \param[in] n̂ - единичный вектор, нормальный к прямой
         // \param[in] 𝑝 - растояние от начало координат до прямой
-CE      Line( ℂ₁ ъ& n̂, double 𝑝 ): p( 𝑝 ), n̂( n̂     ) {};
+CE      Line( C ℂ₁& n̂, double 𝑝 ): p( 𝑝 ), n̂( n̂     ) {};
         // Прямая через точки a̅ и b̅
-CE      Line( ℂ ъ& a̅, ℂ ъ& b̅   ): Line( (a̅ - b̅)*𝐢, (a̅ ^ b̅) ) {};
+CE      Line( C ℂ& a̅, C ℂ& b̅   ): Line( (a̅ - b̅)*𝐢, (a̅ ^ b̅) ) {};
 
-CE      bool    OP ==( Line ъ& l) ъ { return eq( p, l.p) && n̂ == l.n̂; }
-CE      double  dist ( ℂ   ъ& r̅) ъ { return (n̂, r̅) - p             ; } // растояние между прямой и точкой r̅
-CE      ℂ      proj ( ℂ   ъ& r̅) ъ { return r̅ - n̂ * dist( r̅)       ; } // проекция точки r̅ на прямую
+CE      bool    OP ==( C Line& l) C { return eq( p, l.p) && n̂ == l.n̂; }
+CE      double  dist ( C   ℂ& r̅) C { return (n̂, r̅) - p             ; } // растояние между прямой и точкой r̅
+CE      ℂ      proj ( C   ℂ& r̅) C { return r̅ - n̂ * dist( r̅)       ; } // проекция точки r̅ на прямую
 
         // растояние между точкой r̅ и прямой l
-CE F    double dist( ℂ ъ& r̅, Line ъ& l) { return l.dist( r̅); }
+FRIEND  double dist( C ℂ& r̅, C Line& l) { return l.dist( r̅); }
         // растояние между прямой l и точкой r̅
-CE F    double dist( Line ъ& l, ℂ ъ& r̅) { return l.dist( r̅); }
+FRIEND  double dist( C Line& l, C ℂ& r̅) { return l.dist( r̅); }
         // проекция точки r̅ на прямую l
-CE F    ℂ OP >>( ℂ ъ& r̅, Line ъ& l ) { return l.proj( r̅); }
+FRIEND  ℂ OP >>( C ℂ& r̅, C Line& l ) { return l.proj( r̅); }
 
 /*
-friend  ostream& OP<<( ostream &os, Line ъ& obj )
+friend  ostream& OP<<( ostream &os, C Line& obj )
         {
                 os << ℂ( 0.0, obj.p/obj.n.i)
                    << ℂ( obj.p/obj.n.r, 0.0);
@@ -666,21 +655,21 @@ struct Segment: public Line
 {
         ℂ p̅1, p̅2;
 
-CE      Segment( ℂ ъ& p1_, ℂ ъ& p2_ )
+CE      Segment( C ℂ& p1_, C ℂ& p2_ )
         : Line( p1_, p2_ )
         , p̅1( p1_), p̅2( p2_)
         {};
 
         // TODO стремный конст-ор, как бы его спрятать
-CE      Segment( Line ъ& l, ℂ ъ& p1_, ℂ ъ& p2_ )
+CE      Segment( C Line& l, C ℂ& p1_, C ℂ& p2_ )
         : Line( l )
         , p̅1( p1_), p̅2( p2_)
         {};
 
         // обмен концов (рисоваться будет в другую сторону)
-CE      Segment OP - () ъ { return Segment( this->p̅2, this->p̅1 ); }
+CE      Segment OP - () C { return Segment( this->p̅2, this->p̅1 ); }
 
-        void print( ostream& os) ъ
+        void print( ostream& os) C
         {
                 os << p̅1 << p̅2;
         };
@@ -691,27 +680,27 @@ struct Circle
         ℂ     o̅; // центр окружности
         double R; // радиус окружности
 
-CE      Circle( ℂ ъ& center, double radius = 0. )
+CE      Circle( C ℂ& center, double radius = 0. )
         : R( radius), o̅( center )
         {};
 
-CE      bool   OP ==( Circle ъ& c ) ъ { return eq( R, c.R) && o̅ == c.o̅; }
-CE      Circle OP - (             ) ъ
+CE      bool   OP ==( C Circle& c ) C { return eq( R, c.R) && o̅ == c.o̅; }
+CE      Circle OP - (             ) C
         {
-                Circle a = *this;
+                Circle a = self;
                 a.R = -a.R;
                 return a;
         }
 
-CE      ℂ intersect( Line   ъ& l ) ъ
+CE      ℂ intersect( C   Line& l ) C
         {
                 double h = dist( o̅, l);          // расстояние от центра окружности до прямой
                 //ℂ    p̅ = (o̅ - l.n̂ * h);       // точка проекции центра окружности на прямую
                 //ℂ₁   v̂ = l.n̂ * 𝐢;             // направляющий вектор прямой l
-                //return p̅ + v̂ * ce::sqrt(²(R) - ²(h)) * sign;
+                //return p̅ + v̂ * ce::sqrt(²(R) - ²(h));
                 return o̅ - l.n̂ * ℂ( h, ce::sqrt( ²(R) - ²(h)) );
         }
-CE      ℂ intersect( Circle ъ& c2) ъ
+CE      ℂ intersect( C Circle& c2) C
         {
                 Line radical_line( (c2.o̅ - o̅) * 2. 
                                  , abs²(c2.o̅) - abs²(o̅) - ²(c2.R) + ²(R)
@@ -719,42 +708,42 @@ CE      ℂ intersect( Circle ъ& c2) ъ
                 return intersect( radical_line );
         }
 
-CE F    Circle tangent( Circle ъ& c1, Circle ъ& c2, double R )
+FRIEND  Circle tangent( C Circle& c1, C Circle& c2, double R )
         {
                 ℂ center = Circle( c1.o̅, R+c1.R).intersect( Circle( c2.o̅, R+c2.R) );
                 return Circle( center, R );
         }
 
-        // нормаль к касательной к окружностям *this и c2
-CE      ℂ₁ tangent_norm( Circle ъ& c2 ) ъ
+        // нормаль к касательной к окружностям self и c2
+CE      ℂ₁ tangent_norm( C Circle& c2 ) C
         {
                 double sin𝜑 = c2.R - R;         // 𝜑 - угол между линией центров и касательной
                 ℂ₁ â( c2.o̅ - o̅, &sin𝜑 );        // направляющий вектор линии центров
                 return â * ℂ₁( sin𝜑) / 𝐢;       // повернуть â на 𝜑-90°
         }
 
-        // касательная к окружностям *this и c2
-CE      Line tangent( Circle ъ& c2 ) ъ
+        // касательная к окружностям self и c2
+CE      Line tangent( C Circle& c2 ) C
         {
                 ℂ₁ n̂ = tangent_norm( c2 );
                 return Line( n̂, (n̂, o̅) - R );
         }
 
         // точка касания касательной к окружности исходящей из точки p
-CE      ℂ tangent_point( ℂ ъ& p ) ъ
+CE      ℂ tangent_point( C ℂ& p ) C
         {
                 ℂ₁ n̂ = tangent_norm( {p, 0} );
                 return o̅ - n̂*R;
         };
 
-        void print( ostream &os) ъ
+        void print( ostream &os) C
         {
-                CE ъ int segs = 40;
+                CE C int segs = 40;
 
-                //CE ъ ℂ₁ m̂¹⁰ = cis( 2π/segs);
-                CE ъ ℂ₁ m̂( 2π/segs/10 ); // типа 𝛼 ≈ sin 𝛼
-                CE ъ ℂ₁ m̂⁵  = m̂*m̂*m̂*m̂*m̂;
-                CE ъ ℂ₁ m̂¹⁰ = m̂⁵*m̂⁵;
+                //CE C ℂ₁ m̂¹⁰ = cis( 2π/segs);
+                CE C ℂ₁ m̂( 2π/segs/10 ); // типа 𝛼 ≈ sin 𝛼
+                CE C ℂ₁ m̂⁵  = m̂*m̂*m̂*m̂*m̂;
+                CE C ℂ₁ m̂¹⁰ = m̂⁵*m̂⁵;
 
                 ℂ₁ n̂ = 𝟏;
                 for( int i = segs; i --> 0; )
@@ -764,7 +753,7 @@ CE      ℂ tangent_point( ℂ ъ& p ) ъ
                 }
         };
 
-        void print00( ostream &os, Angle α1, Angle α2 ) ъ
+        void print00( ostream &os, Angle α1, Angle α2 ) C
         {
                 Angle Δα = α2 - α1; // угол поворота
                 // кол. сегментов, на круг - 160 сегментов, примерно
@@ -816,15 +805,15 @@ struct Arc: public Circle
         ℂ₁ n̂₁; // единич. вектор из центра дуги на первый конец
         ℂ₁ n̂₂; // единич. вектор из центра дуги на второй конец
 
-CE      Arc( Circle ъ& c, ℂ₁ ъ& _n̂₁, ℂ₁ ъ& _n̂₂)
+CE      Arc( C Circle& c, C ℂ₁& _n̂₁, C ℂ₁& _n̂₂)
         : Circle( c), n̂₁(_n̂₁), n̂₂(_n̂₂)
         {}
-CE      Arc( Circle ъ& c, ℂ ъ& start_point, ℂ ъ& next_point )
+CE      Arc( C Circle& c, C ℂ& start_point, C ℂ& next_point )
         : Circle( c)
         , n̂₁( start_point- c.o̅ )
         , n̂₂( next_point - c.o̅ )
         {}
-CE      Arc( Circle ъ& c, Arc ъ& prev, ℂ ъ& next_point )
+CE      Arc( C Circle& c, C Arc& prev, C ℂ& next_point )
         : Arc( c, prev.o̅ + ce::abs(prev.R)*prev.n̂₂, next_point )
         {
                 // ставим знак вектору n̂₂ таким, чтоб конечная точка дуги была максимально близко к next_point
@@ -834,7 +823,7 @@ CE      Arc( Circle ъ& c, Arc ъ& prev, ℂ ъ& next_point )
                         R = -R;
         }
 
-CE      bool OP ==( Arc ъ& a) ъ
+CE      bool OP ==( C Arc& a) C
         {
                 return  Circle::OP==( a)
                         && n̂₁ == a.n̂₁
@@ -842,18 +831,18 @@ CE      bool OP ==( Arc ъ& a) ъ
                         ;
         }
 
-        void print( ostream &os) ъ
+        void print( ostream &os) C
         {
-                CE ъ int segs = 160;
+                CE C int segs = 160;
 
-                //CE ъ ℂ₁ m̂¹⁰ = cis( 2π/segs);
-                CE ъ ℂ₁ m̂( 2π/segs/10 ); // типа 𝛼 ≈ sin 𝛼
-                CE ъ ℂ₁ m̂⁵ = m̂*m̂*m̂*m̂*m̂;
+                //CE C ℂ₁ m̂¹⁰ = cis( 2π/segs);
+                CE C ℂ₁ m̂( 2π/segs/10 ); // типа 𝛼 ≈ sin 𝛼
+                CE C ℂ₁ m̂⁵ = m̂*m̂*m̂*m̂*m̂;
 
                 ℂ₁ m̂¹⁰ = m̂⁵*m̂⁵;
                 bool dir = (R >= 0); // направление рисования
                 if( !dir )
-                        m̂¹⁰ = ~m̂¹⁰;
+                        m̂¹⁰ = conj( m̂¹⁰);
 
                 ℂ r̅ = abs(R) * n̂₁;
                 os << (o̅ + r̅);
@@ -865,8 +854,8 @@ CE      bool OP ==( Arc ъ& a) ъ
 };
 
 // зазор для соблюдения постулата Жуковского-Чаплыгина (Kutta condition)
-CE ъ ℂ TE1( 1.,  0.00001); // задняя кромка верх
-CE ъ ℂ TE2( 1., -0.00001); // задняя кромка низ
+CE C ℂ TE1( 1.,  0.00001); // задняя кромка верх
+CE C ℂ TE2( 1., -0.00001); // задняя кромка низ
 
 #ifndef NDEBUG
 /*
@@ -897,7 +886,7 @@ int test1()
         CE Arc a_l1  = chain_arc( a_l2.p̅2  , c_l1  , c_bottom, minus );
         CE Arc a_bottom( c_bottom, a_l1.p̅2, s_end.p̅1 );
 
-        std::cout << "PIPE " << D_abs << 'r' << s_abs << '-' << b_abs << '\n'
+        cout    << "PIPE " << D_abs << 'r' << s_abs << '-' << b_abs << '\n'
                 << std::setprecision(5) << std::fixed
                 << a_top << a_l2 << -a_l1 << a_bottom << s_end;
 
@@ -935,7 +924,7 @@ int test2()
         CE Arc a_lead  ( c_lead  , a_top.p̅2  , s_start.p̅1 );
         CE Arc a_bottom( c_bottom, s_start.p̅2, s_end.p̅1   );
 
-        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
+        cout    << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
                 << std::setprecision(5) << std::fixed
                 << a_top << -a_lead << s_start << a_bottom << s_end;
 
@@ -968,7 +957,7 @@ int test3()
         CE Arc a_l2  = chain_arc( a_top.p̅2, c_l2 , c_l1 );
         CE Arc a_l1( c_l1, a_l2.p̅2, s_end.p̅1 );
 
-        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
+        cout    << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
                 << std::setprecision(5) << std::fixed
                 << a_top << a_l2 << a_l1 << s_end;
 
@@ -1004,7 +993,7 @@ int test4()
         CE Segment s_end( s_end0 & c_bottom, TE2 );
         CE Arc a_bottom( c_bottom, s_start.p̅2, s_end.p̅1 );
 
-        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
+        cout    << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << '\n'
                 << std::setprecision(5) << std::fixed
                 << a_top << a_l2 << a_l1 << s_start << a_bottom << s_end;
 
@@ -1045,7 +1034,7 @@ int test5()
                 static_assert( a_bottom == Arc{{{0.3656664547982899638, -1.468874254606818974}, -1.506}, {ф,-0.2185328481759700459, 0.9758295928429812083}, {ф, 0.06316730084589926297, 0.9980029519514677094}}, "");
         }
         
-        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
+        cout    << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
                 << std::setprecision(5) << std::fixed
                 << a_top << a_lef << a_le << a_bottom << p_end << TE2
                 ;
@@ -1054,8 +1043,11 @@ int test5()
 }
 #endif
 
-int main( unsigned argc, ъ char *argv[])
+int main( unsigned argc, C char *argv[])
 {
+        ++argv;
+        --argc;
+
 #ifndef NDEBUG
         return test5();
 #endif
@@ -1063,12 +1055,12 @@ int main( unsigned argc, ъ char *argv[])
         static CE char *param_name[] =
         { "диаметр трубы"
         , "толщина стенки трубы"
-        , "хорда"
+        , "хорда профиля"
         , "радиус передней кромки"
         , "радиус зализа над передней кромкой"
         };
 
-        static double param[ std::size( param_name)] = { 160.0, 4.7, 50.0, 1.5, 18.0};
+        static double param[ size( param_name)] = { 160.0, 4.7, 50.0, 1.5, 18.0};
 
         double &D_abs   = param[0];  // диаметр трубы
         double &s_abs   = param[1];  // толщина стенки трубы
@@ -1083,40 +1075,45 @@ int main( unsigned argc, ъ char *argv[])
                 if( !strcmp( argv[1], "test") && ( n = atoi( argv[2])) )
                 {
                         static CE int (*checks[])() = { &test1, &test2, &test3, &test4, &test5 };
-                        if( (n > 0) && (n <= std::size( checks)) )
+                        if( (n > 0) && (n <= size( checks)) )
                                 return checks[ n-1 ]();
                 }
                 setlocale( LC_ALL, "" );
-                std::cerr << "Ошибка тестов!\n";
+                cerr << "Ошибка тестов!\n";
                 return 1;
         }
  #e nd if
 */
-        if( argc <= std::size( param_name) )
+        if( argc < size( param_name) )
         {
                 setlocale( LC_ALL, "" );
 
-                std::cerr << "Примерные параметры запуска:\n  pipefoil";
-                for( unsigned i = 0; i < std::size( param); ++i)
-                        std::cerr << ' ' << param[ i ];
+                cerr << "Неверное количество параметров, их должно быть " << size( param_name) 
+                     << " а введено " << argc << "\n"
+                        "\n"
+                        "Примерные параметры запуска:\n"
+                        "  pipefoil";
 
-                std::cerr << " >1.dat\nгде:\n";
-                for( unsigned i = 0; i < std::size( param); ++i)
-                        std::cerr << "  " << param[ i ] << "\t- " << param_name[ i ] << '\n';
+                for( unsigned i = 0; i < size( param); ++i)
+                        cerr << ' ' << param[ i ];
 
-                std::cerr << "  1.dat\t- результат: файл с точками профиля, можно \"продуть\" его в xflr5\n";
+                cerr << " >1.dat\nгде:\n";
+                for( unsigned i = 0; i < size( param); ++i)
+                        cerr << "  " << param[ i ] << "\t- " << param_name[ i ] << '\n';
+
+                cerr << "  1.dat\t- результат: файл с точками профиля, можно \"продуть\" его в xflr5\n";
                 return 1;
         }
 
-        for( unsigned i = 0; i < std::size( param); ++i)
+        for( unsigned i = 0; i < size( param); ++i)
         {
                 char *last_char;
-                param[i] = strtod( argv[i+1], &last_char);
+                param[i] = strtod( argv[i], &last_char);
                 if( *last_char)
                 {
                         setlocale( LC_ALL, "" );
-                        std::cerr << "Ошибка " << (i+1) << "-ого параметра \"" << param_name[i] << "\"\n"
-                                "\"" << argv[i+1] << "\" распозналось как \"" << param[i] << "\"\n";
+                        cerr << "Ошибка " << (i+1) << "-ого параметра \"" << param_name[i] << "\"\n"
+                                "\"" << argv[i] << "\" вроде как \"" << param[i] << "\"\n";
                         return 1;
                 }
         }
@@ -1138,7 +1135,7 @@ int main( unsigned argc, ъ char *argv[])
         Arc a_le    ( c_le    , a_lef, c_bottom.o̅);
         Arc a_bottom( c_bottom, a_le , p_end     );
         
-        std::cout << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
+        cout    << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
                 << std::setprecision(5) << std::fixed
                 << a_top << a_lef << a_le << a_bottom << p_end << TE2;
 
