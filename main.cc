@@ -6,6 +6,7 @@
 #include <clocale>
 #include <cassert>
 #include <type_traits>
+#include <ciso646>
 
 #pragma warning( disable: 4455)
 
@@ -47,7 +48,7 @@ AUTO lastbit = sizeof( T) * CHAR_BIT - 1;
 
 template< typename T
         , typename = decltype( declval<T>().print( declval< ostream&>()) )
->
+        >
 ostream& operator <<( ostream& os, const T& t)
 {
         t.print( os);
@@ -68,10 +69,13 @@ struct is_oper_o_eq< '*', T, U, void_t< decltype( declval< T>() *= declval< U>()
 template< typename T, typename U>
 struct is_oper_o_eq< '/', T, U, void_t< decltype( declval< T>() /= declval< U>())> >    : true_type {};
 
+template< char o, typename T, typename U>
+CE bool is_oper_o_eq_v = is_oper_o_eq< o, T, U>::value;
+
 // U o= T → U o T
 #define OP_B( o, U )                                            \
 template< typename T                                            \
-        , typename = enable_if_t< is_oper_o_eq< *#o, U, T>::value>   \
+        , typename = enable_if_t< is_oper_o_eq_v< *#o, U, T>>   \
         >                                                       \
 CE U operator o ( U u, const T& t)                              \
 { u o##= t; return u; };
@@ -80,9 +84,9 @@ CE U operator o ( U u, const T& t)                              \
 // U o= T → T o U
 #define OP_C( o, U )                                            \
 template< typename T                                            \
-        , typename = enable_if_t< !is_oper_o_eq< *#o, T, U>::value>   \
+        , typename = enable_if_t< not is_oper_o_eq_v< *#o, T, U>>\
         >                                                       \
-AUTO operator o ( const T& t, const U& u)                    \
+AUTO operator o ( const T& t, const U& u)                       \
         -> remove_reference_t< decltype( U(u) o##= t)>          \
 {                                                               \
         return U(u) o##= t;                                     \
@@ -92,9 +96,9 @@ AUTO operator o ( const T& t, const U& u)                    \
 // U o= T → T o U
 #define OP_Ȼ( o, U )                                            \
 template< typename T                                            \
-        , typename = enable_if_t< !is_oper_o_eq< *#o, T, U>::value>   \
+        , typename = enable_if_t< not is_oper_o_eq_v< *#o, T, U>>\
         >                                                       \
-AUTO operator o ( const T& t, const U& u)                    \
+AUTO operator o ( const T& t, const U& u)                       \
         -> remove_reference_t< decltype( U(t) o##= u)>          \
 {                                                               \
         return U(t) o##= u;                                     \
@@ -144,6 +148,34 @@ template< typename T> using longer  = typename impl::longer < T>::type;
 template< typename T> using shorter = typename impl::shorter< T>::type;
 template< typename T> using sgned   = typename make_signed  < T>::type;
 template< typename T> using unsgned = typename make_unsigned< T>::type;
+/*
+template< typename L, typename R>
+AUTO OP == ( C L& l, C R& r) -> decltype( r == l )
+{ return r == l; }
+*/
+template< typename L, typename R>
+AUTO OP != ( C L& l, C R& r) -> decltype( !(l == r) )
+{ return !(l == r); }
+
+template< typename T>
+class	Near
+{
+        C T&	ref;	// ссылка на "родителя"
+public:
+EXPL	Near		( C T& r): ref( r) {}
+CE	bool	OP ==	( C T& r) C { return ref.near		( r); }
+CE	bool	OP <=	( C T& r) C { return ref.less_near	( r); }
+CE	bool	OP >=	( C T& r) C { return ref.greater_near	( r); }
+
+FRIEND	bool	OP ==	( C T& l, C Near& r) { return r == l; }
+FRIEND	bool	OP <=	( C T& l, C Near& r) { return r >= l; }
+FRIEND	bool	OP >=	( C T& l, C Near& r) { return r <= l; }
+};
+
+template< typename X
+        , typename = decltype( declval< X>().near( declval< X>()))
+        >
+CE	Near<X>	OP ~	( C X& x) { return Near<X>( x);}
 
 #pragma endregion
 
@@ -183,32 +215,12 @@ struct Double
 {
         using Self = Double;
 private:
-        struct	Near
-        {
-        EXPL	Near		( CSelf  &x): r( x  ) {}
-        CE	Near		( C Near &x): r( x.r) {}
-        CE	bool	OP !	(          ) C { return about_0(r)		;}
-        CE	bool	OP <=	( CSelf  &x) C { return sraw(r) <= sraw(x) + ε	;}
-        CE	bool	OP >=	( CSelf  &x) C { return sraw(r) >= sraw(x) - ε	;}
-        CE	bool	OP !=	( CSelf  &x) C { return !( self == x )		;}
-        CE	bool	OP ==	( CSelf  &x) C // почти равный
-                {
-                        return	   nabs( int64_t( uint64_t(raw(r)) - uint64_t(raw(x)))) >= -ε
-                                || about_0(r) && about_0(x)
-                                ;
-                }
-        private:
-                CSelf&  r;      // ссылка на "родителя"
-        STATIC	int64_t	ε = 3;  // епсилон (в точках на числовой прямой)
-        };
-
         double	val;
 
 public:
 CE	Self		( double x): val( x) {}
 CE OP	double		(         ) C { return  val;	}
 CE	Self	OP -	(         ) C { return -val;	}
-CE	Near	OP ~	(         ) C { return Near( self);}
 CE	double* OP &	(         )   { return &val;	}
 CE C	double* OP &	(         ) C { return &val;	}
 //CE OP	double&		(         )   { return  val;	}
@@ -220,9 +232,9 @@ CE      int64_t	signbit	(         ) C { return raw(val) & (uint64_t(1) << 63)	; 
                                         // val = (x >= 0. ? val : -val)
 CE	void	revsign	( double x)   { val = bit_cast< double>( raw(val) ^ raw(x) & (uint64_t(1) << 63)); }
 CE      double	root    (         ) C {
-                                              if(   val < 0    ) return quiet_NaN;
-                                              if( ! isfinite() ) return val;
-                                                                 return root_rec( val, val, 0.);
+                                              if( val < 0        ) return quiet_NaN;
+                                              if( not isfinite() ) return val;
+                                                                   return root_rec( val, val, 0.);
                                       }
         FN( isfinite); FN( ²); FN( abs);
 
@@ -230,11 +242,6 @@ CE      Self&   OP +=	( double r)   { val += r; return self; }
 CE      Self&   OP -=	( double r)   { val -= r; return self; }
 CE      Self&   OP *=	( double r)   { val *= r; return self; }
 CE      Self&   OP /=	( double r)   { val /= r; return self; }
-
-FRIEND	bool	OP ==	( CSelf& l, C Near& r) { return r == l; }
-FRIEND	bool	OP !=	( CSelf& l, C Near& r) { return r != l; }
-FRIEND	bool	OP <=	( CSelf& l, C Near& r) { return r >= l; }
-FRIEND	bool	OP >=	( CSelf& l, C Near& r) { return r <= l; }
 
 static  CSelf   min             ; //   10000000000000
 static  CSelf   max             ; // 7FEFFFFFFFFFFFFF
@@ -246,11 +253,21 @@ static  CSelf   infinity        ; // 7FF0000000000000
 static  CSelf   quiet_NaN       ; // 7FF8000000000000
 static  CSelf   signaling_NaN   ; // 7FF8000000000001
 
+CE	bool	less_near	( CSelf  &x) C { return sraw(val) <= sraw(x) + ε	;}
+CE	bool	greater_near	( CSelf  &x) C { return sraw(val) >= sraw(x) - ε	;}
+CE	bool	near		( CSelf  &x) C // почти равный
+        {
+                return	   nabs( int64_t( uint64_t(raw(val)) - uint64_t(raw(x)))) >= -ε
+                        || about_0(val) && about_0(x)
+                        ;
+        }
+
 private:
+STATIC	int64_t	ε = 3;  // епсилон (в точках на числовой прямой)
 STATIC	int64_t	raw	( double x) { return bit_cast< int64_t>( x)			;}
 STATIC	int64_t	sraw	( double x) { return raw(x) ^ (uint64_t( raw(x) >> 63) >> 1)	;} // заполнить все 64 бита копиями знакового бита, и обнуляет старший бит
 STATIC	int64_t	raw_abs	( double x) { return raw(x) & ~(uint64_t(1) << 63)		;}
-STATIC	bool	about_0	( double x) { return raw_abs(x) <= raw( min)			;}
+STATIC	bool	about_0	( double x) { return raw_abs(x) < raw( min)			;}
                                                           //raw( 1e-30)			;}
                                                           //raw( 1e-14)			;}
                                                           //raw( numeric_limits< double>::epsilon())		;}
@@ -310,11 +327,11 @@ CE void Double_test()
         static_assert(   a_p <=~ a_m , "***");
         static_assert(   a_p >=~ a_m , "***");
 
-        static_assert(  isfinite( Double::max           ), "***");
-        static_assert(  isfinite( Double::lowest        ), "***");
-        static_assert( !isfinite( Double::infinity      ), "***");
-        static_assert( !isfinite( Double::quiet_NaN     ), "***");
-        static_assert( !isfinite( Double::signaling_NaN ), "***");
+        static_assert(     isfinite( Double::max           ), "***");
+        static_assert(     isfinite( Double::lowest        ), "***");
+        static_assert( not isfinite( Double::infinity      ), "***");
+        static_assert( not isfinite( Double::quiet_NaN     ), "***");
+        static_assert( not isfinite( Double::signaling_NaN ), "***");
 
         //static_assert( about_0( vsv)	, "***");
         //static_assert( vsv ==~ 0d	, "***");
@@ -352,18 +369,7 @@ struct Angle
 private:
         Val     val;
 STATIC  Val     semiturn = Val(1) << lastbit< Val>;
-
-        struct	Near
-        {
-        EXPL	Near		( CSelf  &x): r( x  ) {}
-        CE	Near		( C Near &x): r( x.r) {}
-        //CE	bool	OP !	(          ) C { return !( self == 0 )		;}
-        CE	bool	OP !=	( CSelf  &z) C { return !( self == z )		;}
-        CE	bool	OP ==	( CSelf  &z) C { return nabs( sign_cast( r.val - z.val)) > -eps; } // почти равный
-        private:
-                CSelf&  r;
-        STATIC  sgned< Self::Val> eps = 8;
-        };
+STATIC  sgned< Self::Val> ε = 8;
 
 TINT    Self         ( INT        v ): val( v) {}
 
@@ -374,7 +380,7 @@ EXPL    Self         ( double radian): val(   sgned< longer< Val>>(  radian * (s
                                           ) {}
 EXPL OP double       (              ) C { return val * (π/semiturn)             ; }
 CE      bool    OP ==( CSelf&     r ) C { return val == r.val                   ; }
-CE	Near	OP ~ (              ) C { return Near( self)                    ; }
+CE	bool	near ( CSelf&     r ) C { return nabs( sign_cast( val - r.val)) > -ε; } // почти равный
 CE      Self    OP - (              ) C { return -val                           ; }
 CE      Val     OP / ( CSelf&     r ) C { return val / r.val                    ; }
 CE      Self    OP / ( double     r ) C { return sgned< Val>( double( val) / r ); }
@@ -393,9 +399,6 @@ CE      Self&   OP *=( double     r )   { val *= r    ; return self; }
 
 FRIEND  Self    OP ""ᵒ( unsigned long long);
 FRIEND  Self    OP ""ᵒ( long double       );
-
-FRIEND	bool	OP ==( CSelf& l, C Near& r) { return r == l; }
-FRIEND	bool	OP !=( CSelf& l, C Near& r) { return r != l; }
 #pragma warning( pop)
 };
 
@@ -447,7 +450,7 @@ CE void test_Angle()
         static_assert(    1ᵒ - 359ᵒ ==    2ᵒ, "***" );
         static_assert(  1.5ᵒ + 2.5ᵒ ==    4ᵒ, "***" );
         static_assert(  1.5ᵒ *  10  ==   15ᵒ, "***" );
-        static_assert(          15ᵒ == 1.5ᵒ * 10 , "***" );
+        static_assert(          15ᵒ == 1.5ᵒ * 10, "***" );
         static_assert(  -10ᵒ *  -3  ==   30ᵒ, "***" );
         static_assert(   30ᵒ /  -3  ==  -10ᵒ, "***" );
         static_assert(   30ᵒ /  -3. ==  -10ᵒ, "***" );
@@ -539,17 +542,6 @@ protected:
         Double  r, i;
 CE      void    swap() { double r1 = r; r = i; i = r1; }
 
-        struct	Near
-        {
-        EXPL	Near		( CSelf  &x): r( x  ) {}
-        CE	Near		( C Near &x): r( x.r) {}
-        CE	bool	OP !	(          ) C { return !r.r && !r.i			;}
-        CE	bool	OP !=	( CSelf  &z) C { return !( self == z )			;}
-        CE	bool	OP ==	( CSelf  &z) C { return (r.r ==~ z.r) && (r.i ==~ z.i)	;} // почти равный
-        private:
-                CSelf&  r;
-        };
-
 public:
 CE      Self( 𝐈                 ): r( 0 ), i( 1 ) {}
 EXPL    Self( double s          ): r( s ), i( 0 ) {}
@@ -557,7 +549,6 @@ CE      Self( double r, double i): r( r ), i( i ) {}
 
 CE      double  abs² () C { return  r*r + i*i      ;} // абсолютная величина в квадрате
 CE      double  abs  () C { return ::root( abs²()) ;} // абсолютная величина
-CE	Near	OP ~ () C { return Near( self)     ;}
 CE      Self    OP - () C { return { -r, -i }      ;} // унарный минус
 CE      Self    conj () C { return {  r, -i }      ;} // Сопряжённое (conjugate) число
 CE      Self    recip() C { return conj() /= abs²();} // 1/z - обратная величина (reciprocal, multiplicative inverse)
@@ -588,10 +579,8 @@ CE      Self    root () C // корень квадратный
 
         FN( abs²); FN( abs); FN( conj); FN( recip); FN( ⅟); FN( re); FN( im); FN( ℜ); FN( ℑ); FN( arg); FN( root);
 
-CE      bool    OP ==( CSelf& z) C              { return r == z.r && i == z.i   ;}
-CE      bool    OP !=( CSelf& z) C              { return !( self == z )         ;}
-FRIEND  bool    OP ==( CSelf& l, C ℂ::Near& r) { return r == l                  ;}
-FRIEND  bool    OP !=( CSelf& l, C ℂ::Near& r) { return r != l                  ;}
+CE      bool    OP ==( CSelf& z) C { return r ==  z.r && i ==  z.i;}
+CE	bool	near ( CSelf& z) C { return r ==~ z.r && i ==~ z.i;} // почти равный
 
 CE      Self&   OP +=( CSelf& z)   { r+=z.r; i+=z.i; return self; }
 CE      Self&   OP -=( CSelf& z)   { r-=z.r; i-=z.i; return self; }
@@ -671,6 +660,7 @@ EXPL    Self( C Super& z ): Super( z / z.abs()                          ) {}
 EXPL    Self(Ф,C Super&z ): Super( z                                    ) {} // мамой клянусь - |z| == 1
 EXPL    Self( double sin ): Super( ::root( 1. - sin*sin), sin           ) {}        
 CE      Self( Angle    𝜑 ): Super( cos( double( 𝜑)), sin( double( 𝜑))  ) {} // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
+
 CE      double  abs² () C { return     1.   ; } // абсолютная величина в квадрате = 1
 CE      double  abs  () C { return     1.   ; } // абсолютная величина = 1, этож единичное число ;)
 CE      Self    OP - () C { return {-r, -i }; } // унарный минус (ЕКЧ = -ЕКЧ)
@@ -687,7 +677,7 @@ CE      Self    root () C
                        , i0
                        };
         }
-        FN( abs²); FN( abs); FN( conj); FN( recip); FN( ψarg); FN( root);
+        FN( abs²); FN( abs); FN( conj); FN( recip); FN( ⅟); FN( ψarg); FN( root);
 
 CE      bool    OP > ( CSelf& z) C { return ψarg() > z.ψarg();}
 CE      bool    OP < ( CSelf& z) C { return ψarg() < z.ψarg();}
@@ -720,10 +710,13 @@ CE C ℂ₁ 𝟏 = ℂ₁::𝟏;
 CE ℂ OP ""𝐢 ( unsigned long long a) { return { 0., double(a)}; }
 CE ℂ OP ""𝐢 (        long double a) { return { 0., double(a)}; }
 
+AUTO OP -( 𝐈 ) { return      -ℂ₁::𝐢 ; }
+AUTO root( 𝐈 ) { return root( ℂ₁::𝐢); }
+
 void   ℂ_test()
 {
-        static_assert( root( -𝟏) == 𝐢                           , "***");
-        static_assert( root( -ℂ₁::𝐢) == conj( root( ℂ₁::𝐢))     , "***");
+        static_assert( root( -𝟏) == 𝐢                                   , "***");
+        static_assert( root( -𝐢) == conj( root( 𝐢))                     , "***");
         static_assert( (5 + 𝐢)*(7 - 6𝐢) / (3 + 𝐢)          == (10 - 11𝐢), "***");
         static_assert( (4 + 𝐢)*(5 + 3𝐢) + (3 + 𝐢)*(3 - 2𝐢) == (28 + 14𝐢), "***");
 
@@ -783,7 +776,9 @@ CE      Line( C ℂ₁&_n̂, double 𝑝 ): n̂(_n̂), p( 𝑝 )
         // Прямая через точки a̅ и b̅
 CE      Line( C ℂ& a̅, C ℂ& b̅   ): Line( (a̅ - b̅)*𝐢, (a̅ ^ b̅) ) {};
 
-CE      bool    OP ==( C Line& l) C { return p ==~ l.p && n̂ ==~ l.n̂; }
+CE      bool    OP ==( C Line& l) C { return p ==  l.p && n̂ ==  l.n̂; }
+CE	bool	near ( C Line& l) C { return p ==~ l.p && n̂ ==~ l.n̂; } // почти равный
+
 CE      Line    OP - (          ) C { return Line( -n̂, -p)         ; }
 CE      double  dist ( C   ℂ& r̅) C { return (n̂, r̅) - p            ; } // растояние между прямой и точкой r̅
 CE      ℂ      proj ( C   ℂ& r̅) C { return r̅ - n̂ * dist( r̅)      ; } // проекция точки r̅ на прямую
@@ -848,12 +843,13 @@ struct Circle
         ℂ     o̅; // центр окружности
         Double R; // радиус окружности
 
-CE      Circle( C ℂ& center, double radius = 0. )
+CE      Circle	     ( C ℂ& center, double radius = 0. )
         : R( radius), o̅( center )
         {};
 
-CE      bool   OP ==( C Circle& c ) C { return R ==~ c.R && o̅ ==~ c.o̅; }
-CE      Circle OP - (             ) C
+CE      bool	OP ==( C Circle& c ) C { return R ==  c.R && o̅ ==  c.o̅; }
+CE	bool	near ( C Circle& c ) C { return R ==~ c.R && o̅ ==~ c.o̅; } // почти равный
+CE      Circle	OP - (             ) C
         {
                 Circle a = self;
                 a.R = -a.R;
@@ -984,9 +980,9 @@ void   Circle_test()
 
         static_assert( c_test.tangent_point( ℂ( 5, 0)       ) ==~ ℂ(1.8, 2.4), "***");
 
-        static_assert( c_test.tangent( Circle( {   2, 0}, 1) ) == Line( ℂ₁::𝟏             ,  3), "***");
-        static_assert( c_test.tangent( Circle( { 2⁰⁵, 0}, 2) ) == Line( ℂ(  0.5⁰⁵,  0.5⁰⁵),  3), "***");
-        static_assert( c_test.tangent( Circle( {   9, 0},-3) ) == Line( ℂ(   2./3,  5⁰⁵/3),  3), "***");
+        static_assert( c_test.tangent( Circle( {   2, 0}, 1) ) ==  Line( ℂ₁::𝟏             ,  3), "***");
+        static_assert( c_test.tangent( Circle( { 2⁰⁵, 0}, 2) ) ==~ Line( ℂ(  0.5⁰⁵,  0.5⁰⁵),  3), "***");
+        static_assert( c_test.tangent( Circle( {   9, 0},-3) ) ==~ Line( ℂ(   2./3,  5⁰⁵/3),  3), "***");
 
         static_assert( tangent( c_test, Circle( {  6, 0}, 3),  3 ) == Circle( {  3, -3*3⁰⁵},  3), "***");
         static_assert( tangent( c_test, Circle( {  2, 0}, 1), 10 ) == Circle( { 13,      0}, 10), "***");
@@ -1014,15 +1010,10 @@ CE      Arc( C Circle& c, C Arc& prev, C ℂ& next_point )
                 R.revsign( prev.R * R /*TODO R?*/ * (prev.n̂₂, n̂₁));
         }
 
-CE      bool OP ==( C Arc& a) C
-        {
-                return  Circle::OP==( a)
-                        && n̂₁ == a.n̂₁
-                        && n̂₂ == a.n̂₂
-                        ;
-        }
+CE      bool	OP ==( C Arc& a) C { return  Circle( self) ==  Circle( a) && n̂₁ ==  a.n̂₁ && n̂₂ ==  a.n̂₂; }
+CE	bool	near ( C Arc& a) C { return  Circle( self) ==~ Circle( a) && n̂₁ ==~ a.n̂₁ && n̂₂ ==~ a.n̂₂; } // почти равный
 
-        void print( ostream &os) C
+        void	print( ostream &os) C
         {
                 CE C int segs = 160;
 
