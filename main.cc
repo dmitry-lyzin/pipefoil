@@ -29,6 +29,7 @@ using std::ostream;
 using std::false_type;
 using std::true_type;
 using std::enable_if_t;
+using std::is_same;
 using std::is_integral;
 using std::is_floating_point;
 using std::make_signed;
@@ -58,24 +59,26 @@ ostream& operator <<( ostream& os, const T& t)
 template< typename... >
 using void_t = void;
 
-template< char o, typename T, typename U, typename = void>
-struct is_oper_o_eq                                                                     :false_type {};
-template< typename T, typename U>
-struct is_oper_o_eq< '+', T, U, void_t< decltype( declval< T>() += declval< U>())> >    : true_type {};
-template< typename T, typename U>
-struct is_oper_o_eq< '-', T, U, void_t< decltype( declval< T>() -= declval< U>())> >    : true_type {};
-template< typename T, typename U>
-struct is_oper_o_eq< '*', T, U, void_t< decltype( declval< T>() *= declval< U>())> >    : true_type {};
-template< typename T, typename U>
-struct is_oper_o_eq< '/', T, U, void_t< decltype( declval< T>() /= declval< U>())> >    : true_type {};
+// преобразовать строку в int
+#define S2I( str ) ((str)[0] + 256*(str)[1])
 
-template< char o, typename T, typename U>
-CE bool is_oper_o_eq_v = is_oper_o_eq< o, T, U>::value;
+// помогалка для проверки существования оператора oper для типов L и R
+template< typename L, int oper, typename R, typename = void>
+struct is_oper: false_type {};
+#define MK_IS_OPER( o ) \
+template< typename L, typename R> \
+struct is_oper< L, S2I(#o), R, void_t< decltype( declval< L>() o declval< R>())> >: true_type {};
+
+MK_IS_OPER(==)
+MK_IS_OPER(+=) MK_IS_OPER(-=) MK_IS_OPER(*=) MK_IS_OPER(/=)
+
+template< typename L, int o, typename R>
+CE bool is_oper_v = is_oper< L, o, R>::value;
 
 // U o= T → U o T
 #define OP_B( o, U )                                            \
 template< typename T                                            \
-        , typename = enable_if_t< is_oper_o_eq_v< *#o, U, T>>   \
+        , typename = enable_if_t< is_oper_v< U, S2I( #o"="), T>>\
         >                                                       \
 CE U operator o ( U u, const T& t)                              \
 { u o##= t; return u; };
@@ -84,7 +87,7 @@ CE U operator o ( U u, const T& t)                              \
 // U o= T → T o U
 #define OP_C( o, U )                                            \
 template< typename T                                            \
-        , typename = enable_if_t< not is_oper_o_eq_v< *#o, T, U>>\
+        , typename = enable_if_t< not is_oper_v< T, S2I( #o"="), U>> \
         >                                                       \
 AUTO operator o ( const T& t, const U& u)                       \
         -> remove_reference_t< decltype( U(u) o##= t)>          \
@@ -96,7 +99,7 @@ AUTO operator o ( const T& t, const U& u)                       \
 // U o= T → T o U
 #define OP_Ȼ( o, U )                                            \
 template< typename T                                            \
-        , typename = enable_if_t< not is_oper_o_eq_v< *#o, T, U>>\
+        , typename = enable_if_t< not is_oper_v< T, S2I( #o"="), U>> \
         >                                                       \
 AUTO operator o ( const T& t, const U& u)                       \
         -> remove_reference_t< decltype( U(t) o##= u)>          \
@@ -148,11 +151,16 @@ template< typename T> using longer  = typename impl::longer < T>::type;
 template< typename T> using shorter = typename impl::shorter< T>::type;
 template< typename T> using sgned   = typename make_signed  < T>::type;
 template< typename T> using unsgned = typename make_unsigned< T>::type;
-/*
-template< typename L, typename R>
+
+template< typename L, typename R
+        , typename = enable_if_t< not is_same< L, R>::value
+                               && not is_oper_v< L, S2I("=="), R>
+                               &&     is_oper_v< R, S2I("=="), L>
+                                >
+        >
 AUTO OP == ( C L& l, C R& r) -> decltype( r == l )
 { return r == l; }
-*/
+
 template< typename L, typename R>
 AUTO OP != ( C L& l, C R& r) -> decltype( !(l == r) )
 { return !(l == r); }
@@ -167,7 +175,6 @@ CE	bool	OP ==	( C T& r) C { return ref.near		( r); }
 CE	bool	OP <=	( C T& r) C { return ref.less_near	( r); }
 CE	bool	OP >=	( C T& r) C { return ref.greater_near	( r); }
 
-FRIEND	bool	OP ==	( C T& l, C Near& r) { return r == l; }
 FRIEND	bool	OP <=	( C T& l, C Near& r) { return r >= l; }
 FRIEND	bool	OP >=	( C T& l, C Near& r) { return r <= l; }
 };
