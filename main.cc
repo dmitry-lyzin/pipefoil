@@ -42,17 +42,17 @@ using std::size;
 
 #pragma region // template operators
 
-#define FN( f)  constexpr friend auto f( const Self& r) -> decltype( r.f()) { return r.f(); }
+#define FN( f) constexpr friend auto f( const Self& r) -> decltype( r.f()) { return r.f(); }
 
 template< typename T>
 AUTO lastbit = sizeof( T) * CHAR_BIT - 1;
 
-template< typename T
-        , typename = decltype( declval<T>().print( declval< ostream&>()) )
+template< typename X
+        , typename = decltype( declval<X>().print( declval< ostream&>()) )
         >
-ostream& operator <<( ostream& os, const T& t)
+ostream& operator <<( ostream& os, const X& x)
 {
-        t.print( os);
+        x.print( os);
         return os;
 }
 
@@ -65,61 +65,62 @@ using void_t = void;
 // помогалка для проверки существования оператора oper для типов L и R
 template< typename L, int oper, typename R, typename = void>
 struct is_oper: false_type {};
-#define MK_IS_OPER( o ) \
+
+#define MK_IS_OPER( oper ) \
 template< typename L, typename R> \
-struct is_oper< L, S2I(#o), R, void_t< decltype( declval< L>() o declval< R>())> >: true_type {};
+struct is_oper< L, S2I(#oper), R, void_t< decltype( declval< L>() oper declval< R>())> >: true_type {};
 
 MK_IS_OPER(==)
 MK_IS_OPER(+=) MK_IS_OPER(-=) MK_IS_OPER(*=) MK_IS_OPER(/=)
 
-template< typename L, int o, typename R>
-CE bool is_oper_v = is_oper< L, o, R>::value;
+template< typename L, int oper, typename R>
+CE bool is_oper_v = is_oper< L, oper, R>::value;
 
-// U o= T → U o T
-#define OP_B( o, U )                                            \
-template< typename T                                            \
-        , typename = enable_if_t< is_oper_v< U, S2I( #o"="), T>>\
+// L o= R → L o R
+#define OP_B( o, L )                                            \
+template< typename R                                            \
+        , typename = enable_if_t< is_oper_v< L, S2I( #o"="), R>>\
         >                                                       \
-CE U operator o ( U u, const T& t)                              \
-{ u o##= t; return u; };
+CE L operator o ( L l, const R& r)                              \
+{ l o##= r; return l; };
 
 // коммутативный оператор с каким-то типом
-// U o= T → T o U
-#define OP_C( o, U )                                            \
-template< typename T                                            \
-        , typename = enable_if_t< not is_oper_v< T, S2I( #o"="), U>> \
+// L o= R → R o L
+#define OP_C( o, L )                                            \
+template< typename R                                            \
+        , typename = enable_if_t< not is_oper_v< R, S2I( #o"="), L>> \
         >                                                       \
-AUTO operator o ( const T& t, const U& u)                       \
-        -> remove_reference_t< decltype( U(u) o##= t)>          \
+AUTO operator o ( const R& r, const L& l)                       \
+        -> remove_reference_t< decltype( L(l) o##= r)>          \
 {                                                               \
-        return U(u) o##= t;                                     \
+        return L(l) o##= r;                                     \
 };
 
 // некоммутативный оператор с каким-то типом
-// U o= T → T o U
-#define OP_Ȼ( o, U )                                            \
-template< typename T                                            \
-        , typename = enable_if_t< not is_oper_v< T, S2I( #o"="), U>> \
+// L o= R → R o L
+#define OP_Ȼ( o, L )                                            \
+template< typename R                                            \
+        , typename = enable_if_t< not is_oper_v< R, S2I( #o"="), L>> \
         >                                                       \
-AUTO operator o ( const T& t, const U& u)                       \
-        -> remove_reference_t< decltype( U(t) o##= u)>          \
+AUTO operator o ( const R& r, const L& l)                       \
+        -> remove_reference_t< decltype( L(r) o##= l)>          \
 {                                                               \
-        return U(t) o##= u;                                     \
+        return L(r) o##= l;                                     \
 };
 
 // оба варианта коммутативного оператора с каким-то типом
-#define OPS_C( oper, type ) OP_B( oper, type ) OP_C( oper, type )
+#define OPS_C( oper, l_type ) OP_B( oper, l_type ) OP_C( oper, l_type )
 
 // оба варианта некоммутативного оператора с каким-то типом
-#define OPS_Ȼ( oper, type ) OP_B( oper, type ) OP_Ȼ( oper, type )
+#define OPS_Ȼ( oper, l_type ) OP_B( oper, l_type ) OP_Ȼ( oper, l_type )
 
 
-// создать арифметические операторы (+-*/) для type
-#define OPS_ARITH( type)\
-OPS_C( +, type )        \
-OPS_Ȼ( -, type )        \
-OPS_C( *, type )        \
-OPS_Ȼ( /, type )
+// создать арифметические операторы (+-*/) для l_type
+#define OPS_ARITH( l_type)\
+OPS_C( +, l_type )        \
+OPS_Ȼ( -, l_type )        \
+OPS_C( *, l_type )        \
+OPS_Ȼ( /, l_type )
 
 #define TINT template< typename INT  , typename = enable_if_t< is_integral      < INT  >::value>> constexpr
 #define TFLT template< typename FLOAT, typename = enable_if_t< is_floating_point< FLOAT>::value>> constexpr
@@ -899,17 +900,17 @@ STATIC  ℂ₁ cathet2( C ℂ& hypotenuse, Double cathet1 )
 
 CE      ℂ intersect( C   Line& l ) C
         {
-                Double h = dist( o̅, l);          // расстояние от центра окружности до прямой
-                //ℂ    p̅ = (o̅ - l.n̂ * h);       // точка проекции центра окружности на прямую
+                Double cathet1 = dist( o̅, l);   // расстояние от центра окружности до прямой
+                //ℂ    p̅ = (o̅ - l.n̂ * cathet1); // точка проекции центра окружности на прямую
                 //ℂ₁   v̂ = l.n̂ * 𝐢;             // направляющий вектор прямой l
-                //return p̅ + v̂ * root(²(R) - ²(h));
-                return o̅ - l.n̂ * ℂ{ h, root( ²(R) - ²(h)) };
+                //return p̅ + v̂ * root(²(R) - ²(cathet1));
+                return o̅ - l.n̂ * ℂ{ cathet1, root( ²(R) - ²(cathet1)) };
         }
 CE      ℂ intersect( C Circle& c2) C
         {
                 C Circle& c1 = self;
-                double h = (c2.o̅, c1.o̅) - (abs²(c2.o̅) + abs²(c1.o̅) - ²(c2.R) + ²(c1.R))/2;
-                return c1.o̅ - c1.R * cathet2( (c2.o̅ - c1.o̅)*c1.R, h);
+                double cathet1 = (c2.o̅, c1.o̅) - (abs²(c2.o̅) + abs²(c1.o̅) - ²(c2.R) + ²(c1.R))/2;
+                return c1.o̅ - c1.R * cathet2( (c2.o̅ - c1.o̅)*c1.R, cathet1);
         }
 
 FRIEND  Circle tangent( C Circle& c1, C Circle& c2, double R )
@@ -928,9 +929,7 @@ CE      Line tangent( C Circle& c2 ) C
         // точка касания касательной к окружности исходящей из точки p
 CE      ℂ tangent_point( C ℂ& p̅ ) C
         {
-                //ℂ₁ n̂ = tangent_norm( {p̅, 0} );
-                //return o̅ - n̂*R;
-                return o̅ + R * cathet2( p̅ - o̅, R);
+                return o̅ - R * cathet2( o̅ - p̅, R);
         };
 
         void print( ostream &os) C
