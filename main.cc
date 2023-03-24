@@ -7,38 +7,94 @@
 #include <cassert>
 #include <type_traits>
 #include <ciso646>
+#include <cstdint>
+#include <bit>
+#include <limits>
+#include <climits>
+#include <cstddef>
 
 #pragma warning( disable: 4455)
 
 #define CE      constexpr
+#define CEC     constexpr const
+#define CEOP    constexpr operator
 #define EXPL    constexpr explicit
-#define FRIEND  constexpr friend
+#define FRIEND  constexpr friend const
 #define STATIC  constexpr static
 #define AUTO    constexpr auto
 #define OP      operator
 #define C       const
-#define Self    ​ // этот тип
 #define CSelf   const Self
-#define self    *this
-#define ㄥ      *cis
-#define bit_cast _Bit_cast
+#define self    (*this)
+//#define ㄥ      *cis
 
-using std::bit_cast;
 using std::declval;
 using std::ostream;
 using std::false_type;
 using std::true_type;
-using std::enable_if_t;
+using std::enable_if;
 using std::is_same;
 using std::is_integral;
 using std::is_floating_point;
+using std::is_unsigned;
+using std::is_signed;
 using std::make_signed;
 using std::make_unsigned;
 using std::numeric_limits;
-using std::remove_reference_t;
 using std::cout;
 using std::cerr;
-using std::size;
+#if __cplusplus >= 201411L
+    using std::size;
+#else
+    template< class T, std::size_t N>
+    CE std::size_t size( const T (&array)[N] ) { return N; }
+#endif
+
+// ищем bit_cast
+#if __cplusplus >= 201806L
+    using std::bit_cast;
+#else
+#   ifdef _MSC_VER
+#       define bit_cast _Bit_cast
+        using std::bit_cast;
+#   else
+#       ifdef __has_builtin
+#           if __has_builtin( __builtin_bit_cast)
+
+                template< typename Dest, typename Source>
+                typename enable_if
+                <          sizeof( Dest) == sizeof( Source)
+                        && std::is_trivially_copyable< Dest  >::value
+                        && std::is_trivially_copyable< Source>::value
+                ,       Dest
+                >::type CE bit_cast( const Source& source)
+                {
+                        return __builtin_bit_cast( Dest, source);
+                }
+
+#           endif
+#       else
+                template< class Dest, class Source>
+                typename enable_if
+                <          sizeof( Dest) == sizeof( Source)
+                        && std::is_trivially_copyable< Source>::value
+                        && std::is_trivially_copyable< Dest  >::value
+                ,       Dest
+                >::type CE bit_cast( const Source& source)
+                {
+                        static_assert( std::is_trivially_constructible_v< Dest>,
+                                "This implementation additionally requires "
+                                "destination type to be trivially constructible");
+
+                        Dest dest;
+                        std::memcpy( &dest, &source, sizeof( Dest)); // требуется constexpr
+                        return dest;
+                }
+#       endif
+#   endif
+#endif
+
+C class Ф{} ф; // МАМОЙ КЛЯНУСЬ (флаг для конструкторов из сырых данных)
 
 #pragma region // template operators
 
@@ -56,74 +112,8 @@ ostream& operator <<( ostream& os, const X& x)
         return os;
 }
 
-template< typename... >
-using void_t = void;
-
-// преобразовать строку в int
-#define S2I( str ) ((str)[0] + 256*(str)[1])
-
-// помогалка для проверки существования оператора oper для типов L и R
-template< typename L, int oper, typename R, typename = void>
-struct is_oper: false_type {};
-
-#define MK_IS_OPER( oper ) \
-template< typename L, typename R> \
-struct is_oper< L, S2I(#oper), R, void_t< decltype( declval< L>() oper declval< R>())> >: true_type {};
-
-MK_IS_OPER(==)
-MK_IS_OPER(+=) MK_IS_OPER(-=) MK_IS_OPER(*=) MK_IS_OPER(/=)
-
-template< typename L, int oper, typename R>
-CE bool is_oper_v = is_oper< L, oper, R>::value;
-
-// L o= R → L o R
-#define OP_B( o, L )                                            \
-template< typename R                                            \
-        , typename = enable_if_t< is_oper_v< L, S2I( #o"="), R>>\
-        >                                                       \
-CE L operator o ( L l, const R& r)                              \
-{ l o##= r; return l; };
-
-// коммутативный оператор с каким-то типом
-// L o= R → R o L
-#define OP_C( o, L )                                            \
-template< typename R                                            \
-        , typename = enable_if_t< not is_oper_v< R, S2I( #o"="), L>> \
-        >                                                       \
-AUTO operator o ( const R& r, const L& l)                       \
-        -> remove_reference_t< decltype( L(l) o##= r)>          \
-{                                                               \
-        return L(l) o##= r;                                     \
-};
-
-// некоммутативный оператор с каким-то типом
-// L o= R → R o L
-#define OP_Ȼ( o, L )                                            \
-template< typename R                                            \
-        , typename = enable_if_t< not is_oper_v< R, S2I( #o"="), L>> \
-        >                                                       \
-AUTO operator o ( const R& r, const L& l)                       \
-        -> remove_reference_t< decltype( L(r) o##= l)>          \
-{                                                               \
-        return L(r) o##= l;                                     \
-};
-
-// оба варианта коммутативного оператора с каким-то типом
-#define OPS_C( oper, l_type ) OP_B( oper, l_type ) OP_C( oper, l_type )
-
-// оба варианта некоммутативного оператора с каким-то типом
-#define OPS_Ȼ( oper, l_type ) OP_B( oper, l_type ) OP_Ȼ( oper, l_type )
-
-
-// создать арифметические операторы (+-*/) для l_type
-#define OPS_ARITH( l_type)\
-OPS_C( +, l_type )        \
-OPS_Ȼ( -, l_type )        \
-OPS_C( *, l_type )        \
-OPS_Ȼ( /, l_type )
-
-#define TINT template< typename INT  , typename = enable_if_t< is_integral      < INT  >::value>> constexpr
-#define TFLT template< typename FLOAT, typename = enable_if_t< is_floating_point< FLOAT>::value>> constexpr
+#define TINT template< typename INT  , typename = typename enable_if< is_integral      < INT  >::value>::type> constexpr
+#define TFLT template< typename FLOAT, typename = typename enable_if< is_floating_point< FLOAT>::value>::type> constexpr
 
 namespace impl
 {
@@ -153,93 +143,159 @@ template< typename T> using shorter = typename impl::shorter< T>::type;
 template< typename T> using sgned   = typename make_signed  < T>::type;
 template< typename T> using unsgned = typename make_unsigned< T>::type;
 
-template< typename L, typename R
-        , typename = enable_if_t< not is_same< L, R>::value
-                               && not is_oper_v< L, S2I("=="), R>
-                               &&     is_oper_v< R, S2I("=="), L>
-                                >
-        >
-AUTO OP == ( C L& l, C R& r) -> decltype( r == l )
-{ return r == l; }
-
-template< typename L, typename R>
-AUTO OP != ( C L& l, C R& r) -> decltype( !(l == r) )
-{ return !(l == r); }
-
-template< typename T>
-class	Near
+template< typename Self, typename Other = Self>
+struct Mul_div_assign_operators
 {
-        C T&	ref;	// ссылка на "родителя"
-public:
-EXPL	Near		( C T& r): ref( r) {}
-CE	bool	OP ==	( C T& r) C { return ref.near		( r); }
-CE	bool	OP <=	( C T& r) C { return ref.less_near	( r); }
-CE	bool	OP >=	( C T& r) C { return ref.greater_near	( r); }
-
-FRIEND	bool	OP <=	( C T& l, C Near& r) { return r >= l; }
-FRIEND	bool	OP >=	( C T& l, C Near& r) { return r <= l; }
+        FRIEND  Self& OP *=( Self& l, C Other& r) { return l = l * r; }
+        FRIEND  Self& OP /=( Self& l, C Other& r) { return l = l / r; }
 };
 
-template< typename X
-        , typename = decltype( declval< X>().near( declval< X>()))
-        >
-CE	Near<X>	OP ~	( C X& x) { return Near<X>( x);}
+template< typename Self, typename Other = Self>
+struct Arith_assign_operators: Mul_div_assign_operators< Self, Other>
+{
+        FRIEND  Self& OP +=(  Self& l, C Other& r) { return l = l +   r ; }
+        FRIEND  Self& OP -=(  Self& l, C Other& r) { return l = l + (-r); }
+        FRIEND  auto  OP - ( CSelf& l, C Other& r) { return     l + (-r); }
+};
+
+template< typename Self, typename Other>
+struct Mul_div_operators: Mul_div_assign_operators< Self, Other>
+{
+        FRIEND  auto  OP * ( C Other& l, CSelf& r) { return r         * l; }
+        FRIEND  auto  OP / ( C Other& l, CSelf& r) { return r.recip() * l; }
+};
+
+// добавить операции сравнения с другим типом
+template< typename Self, typename Other = Self>
+struct Comparable
+{
+        FRIEND  bool OP !=( CSelf& l, C Other& r) { return !(l == r); }
+        FRIEND	bool OP >=( CSelf& l, C Other& r) { return !(l <  r); }
+        FRIEND	bool OP <=( CSelf& l, C Other& r) { return !(l >  r); }
+
+        FRIEND  bool OP !=( C Other& l, CSelf& r) { return !(r == l); }
+        FRIEND	bool OP >=( C Other& l, CSelf& r) { return !(r >  l); }
+        FRIEND	bool OP <=( C Other& l, CSelf& r) { return !(r <  l); }
+
+#if __cplusplus < 202000
+        FRIEND  bool OP ==( C Other& l, CSelf& r) { return   r == l ; }
+#endif
+        FRIEND  bool OP < ( C Other& l, CSelf& r) { return   r >  l ; }
+        FRIEND  bool OP > ( C Other& l, CSelf& r) { return   r <  l ; }
+};
+
+// добавить операции сравнения с самим собой
+template< typename Self>
+struct Comparable< Self, Self>
+{
+        FRIEND	bool OP !=( CSelf& l, CSelf& r) { return !(l == r); }
+        FRIEND	bool OP >=( CSelf& l, CSelf& r) { return !(l <  r); }
+
+        FRIEND	bool OP <=( CSelf& l, CSelf& r) { return !(r <  l); }
+        FRIEND  bool OP > ( CSelf& l, CSelf& r) { return   r <  l ; }
+};
+
+template< typename Self, typename Other>
+struct Arith_binary_operators   : Arith_assign_operators< Self, Other>
+                                , Comparable            < Self, Other>
+{
+        FRIEND  auto  OP + ( C Other& l, CSelf& r) { return   r  + l; }
+        FRIEND  auto  OP - ( C Other& l, CSelf& r) { return (-r) + l; }
+        FRIEND  auto  OP * ( C Other& l, CSelf& r) { return   r  * l; }
+        //FRIEND  auto  OP / ( C Other& l, CSelf& r) { return Self( l) / r;}
+        FRIEND  auto  OP / ( C Other& l, CSelf& r) { return (conj(r) * l) / abs²(r);}
+};
+
+
+template< typename Self>
+struct Arith_function
+{
+        FRIEND  auto    abs  ( CSelf& x) { return x.abs  (); }
+        FRIEND  auto    abs² ( CSelf& x) { return x.abs² (); }
+        FRIEND  auto    recip( CSelf& x) { return x.recip(); }
+        FRIEND  auto    ⅟   ( CSelf& x) { return x.recip(); }
+        FRIEND  auto    ²    ( CSelf& x) { return x.²    (); }
+};
+
+template< typename Self>
+class Near: Comparable< Near<Self>, Self>
+{
+        CSelf&	ref;	// ссылка на "родителя"
+public:
+        EXPL	Near		( CSelf& r): ref( r) {}
+        CEC	bool	OP ==	( CSelf& r) C { return  ref.near	( r); }
+        CEC	bool	OP <	( CSelf& r) C { return !ref.near_greater( r); }
+        CEC	bool	OP >	( CSelf& r) C { return !ref.near_less	( r); }
+};
+
+template< typename Self>
+struct Near_comparable
+{
+        FRIEND	Near< Self> OP ~ ( CSelf& x) { return Near< Self>(x); }
+};
 
 #pragma endregion
 
-
 // constexpr'сный способ превращения T в signed T
 template< typename T>
-enable_if_t< is_integral< T>::value && std::is_unsigned< T>::value,
-sgned< T> > CE sign_cast( T x)
+CE auto sign_cast( T x) -> typename
+enable_if
+<       is_integral< T>::value && is_unsigned< T>::value
+,       sgned< T>
+>::type
 {
-        using sT = sgned< T>;
-        CE sT min = numeric_limits< sT>::min();
+        using Signed_T = sgned< T>;
+        CE Signed_T min = numeric_limits< Signed_T>::min();
         // этот if нужен для осчастливливания constexpr'а,
         // надеюсь, оптимизатор его выкинет
         if( x >= min )
-                return sT( x - min) + min;
+                return Signed_T( x - min) + min;
 
         return x;
 }
 
+// абсолютное значение, но с минусом, чтоб избежать глюка с abs( самое_большое_отрицательное)
 template< typename T>
-enable_if_t< is_integral< T>::value && std::is_signed< T>::value,
-T> CE nabs( T x)
+CE auto nabs( T x) -> typename
+enable_if
+<       is_integral< T>::value && is_signed< T>::value
+,       T
+>::type
 {
+        using uT = unsgned< T>;
         // x ⩾ 0 → mask = 0
         // x < 0 → mask = -1
-        using uT = unsgned< T>;
         const uT mask = x >> lastbit< T>;
         return mask - (uT(x) ^ mask);
 };
 
-C class Ф{} ф; // МАМОЙ КЛЯНУСЬ (флаг для конструкторов из сырых данных)
-
-struct Turn;
-
 #pragma region // Double{}
-struct Double
+
+struct Double: Near_comparable< Double>
 {
-        using Self = Double;
+        #define Self Double
 private:
         double	val;
 
 public:
+CE	Self		(         ): val(  ) {}
 CE	Self		( double x): val( x) {}
-CE OP	double		(         ) C { return  val;	}
-CE	Self	OP -	(         ) C { return -val;	}
+//CE      Self		( CSelf &x): val( x.val) {}
+CEOP C	double		(         ) C { return  val;	}
+CEC	Self	OP -	(         ) C { return -val;	}
 CE	double* OP &	(         )   { return &val;	}
-CE C	double* OP &	(         ) C { return &val;	}
-//CE OP	double&		(         )   { return  val;	}
-//CE OP	C double&	(         ) C { return  val;	}
-CE	bool    isfinite(         ) C { return raw_abs( val) < raw( infinity)	; }
-CE      double  ²       (         ) C { return val * val			; }
-CE	double	abs	(         ) C { return bit_cast< double>( raw_abs( val)); }
-CE      int64_t	signbit	(         ) C { return raw(val) & (uint64_t(1) << 63)	; }
+CEC	double* OP &	(         ) C { return &val;	}
+//CEOP 	double&		(         )   { return  val;	}
+//CEOP 	C double&	(         ) C { return  val;	}
+CEC	bool    isfinite(         ) C { return raw_abs( val) < raw( infinity)	; }
+CEC	double  ²       (         ) C { return val * val			; }
+CEC	double	abs	(         ) C { return bit_cast< double>( raw_abs( val)); }
+CEC	int64_t	signbit	(         ) C { return raw(val) & (uint64_t(1) << 63)	; }
                                         // val = (x >= 0. ? val : -val)
-CE	void	revsign	( double x)   { val = bit_cast< double>( raw(val) ^ raw(x) & (uint64_t(1) << 63)); }
-CE      double	root    (         ) C {
+CEC	double	copysign( double x) C { return x < 0. ? -abs() : abs()		; }
+//CEC	void	sgn	( double x)   { val = bit_cast< double>( raw(val) ^ raw(x) & (uint64_t(1) << 63)); }
+
+CEC	double	root    (         ) C {
                                               if( val < 0        ) return quiet_NaN;
                                               if( not isfinite() ) return val;
                                                                    return root_rec( val, val, 0.);
@@ -261,26 +317,21 @@ static  CSelf   infinity        ; // 7FF0000000000000
 static  CSelf   quiet_NaN       ; // 7FF8000000000000
 static  CSelf   signaling_NaN   ; // 7FF8000000000001
 
-CE	bool	less_near	( CSelf  &x) C { return sraw(val) <= sraw(x) + ε	;}
-CE	bool	greater_near	( CSelf  &x) C { return sraw(val) >= sraw(x) - ε	;}
-CE	bool	near		( CSelf  &x) C // почти равный
+CEC	bool	near_less	( CSelf &x) C { return sraw(val) < sraw(x) + ε	;} // почти равный и меньше
+CEC	bool	near_greater	( CSelf &x) C { return sraw(val) > sraw(x) - ε	;} // почти равный и больше
+CEC	bool	near		( CSelf &x) C // почти равный
         {
                 return	   nabs( int64_t( uint64_t(raw(val)) - uint64_t(raw(x)))) >= -ε
-                        || about_0(val) && about_0(x)
+                        || near_0(val) && near_0(x)
                         ;
         }
-
+        
 private:
 STATIC	int64_t	ε = 3;  // епсилон (в точках на числовой прямой)
 STATIC	int64_t	raw	( double x) { return bit_cast< int64_t>( x)			;}
 STATIC	int64_t	sraw	( double x) { return raw(x) ^ (uint64_t( raw(x) >> 63) >> 1)	;} // заполнить все 64 бита копиями знакового бита, и обнуляет старший бит
 STATIC	int64_t	raw_abs	( double x) { return raw(x) & ~(uint64_t(1) << 63)		;}
-STATIC	bool	about_0	( double x) { return raw_abs(x) < raw( min)			;}
-                                                          //raw( 1e-30)			;}
-                                                          //raw( 1e-14)			;}
-                                                          //raw( numeric_limits< double>::epsilon())		;}
-                                                          //raw(epsilon/(uint64_t(1)<<55));}
-                                                          //0x3CC0000000000000ul            ;}
+STATIC	bool	near_0	( double x) { return raw_abs(x) < raw( min)			;}
 STATIC	double  root_rec( double r, double curr, double prev)
         {
                 // sqrt Newton-Raphson
@@ -289,27 +340,43 @@ STATIC	double  root_rec( double r, double curr, double prev)
                         return curr;
                 return root_rec( r, (curr + r/curr) / 2, curr);
         }
+        #undef Self
 };
 
-CE double root( const Double& r) { return r.root(); }
+CEC	double	root	( const Double& r) { return        r .root(); }
+CEC	double	root	( double r       ) { return Double(r).root(); }
+CEC	double	sgn	( double x, double y)
+{
+        return y < 0 ? -x : x;
+        //return bit_cast< double>( bit_cast< uint64_t>(x) ^ (bit_cast< uint64_t>(y) & (uint64_t(1) << 63)));
+}
 
-CE const Double Double::min             = numeric_limits< double>::min          (); //   10000000000000
-CE const Double Double::max             = numeric_limits< double>::max          (); // 7FEFFFFFFFFFFFFF
-CE const Double Double::lowest          = numeric_limits< double>::lowest       (); // FFEFFFFFFFFFFFFF
-CE const Double Double::epsilon         = numeric_limits< double>::epsilon      (); // 3CB0000000000000 2.220446049250313081e-16
-CE const Double Double::round_error     = numeric_limits< double>::round_error  (); // 3FE0000000000000 0.5
-CE const Double Double::denorm_min      = numeric_limits< double>::denorm_min   (); //                1
-CE const Double Double::infinity        = numeric_limits< double>::infinity     (); // 7FF0000000000000
-CE const Double Double::quiet_NaN       = numeric_limits< double>::quiet_NaN    (); // 7FF8000000000000
-CE const Double Double::signaling_NaN   = numeric_limits< double>::signaling_NaN(); // 7FF8000000000001
+CEC	Double	Double::min             = numeric_limits< double>::min          (); //   10000000000000
+CEC	Double	Double::max             = numeric_limits< double>::max          (); // 7FEFFFFFFFFFFFFF
+CEC	Double	Double::lowest          = numeric_limits< double>::lowest       (); // FFEFFFFFFFFFFFFF
+CEC	Double	Double::epsilon         = numeric_limits< double>::epsilon      (); // 3CB0000000000000 2.220446049250313081e-16
+CEC	Double	Double::round_error     = numeric_limits< double>::round_error  (); // 3FE0000000000000 0.5
+CEC	Double	Double::denorm_min      = numeric_limits< double>::denorm_min   (); //                1
+CEC	Double	Double::infinity        = numeric_limits< double>::infinity     (); // 7FF0000000000000
+CEC	Double	Double::quiet_NaN       = numeric_limits< double>::quiet_NaN    (); // 7FF8000000000000
+CEC	Double	Double::signaling_NaN   = numeric_limits< double>::signaling_NaN(); // 7FF8000000000001
 
-CE Double operator ""d (        long double x) { return x; }
-CE Double operator ""d ( unsigned long long x) { return x; }
-CE double operator ""⁰⁵(        long double x) { return root( x); }
-CE double operator ""⁰⁵( unsigned long long x) { return root( x); }
+CEC	Double	OP ""_d	(        long double x) { return x      ; }
+CEC	Double	OP ""_d	( unsigned long long x) { return x      ; }
+CEC	double	OP ""²	(        long double x) { return x * x  ; }
+CEC	double	OP ""²	( unsigned long long x) { return x * x  ; }
+CEC	double	OP ""⁰⁵	(        long double x) { return root(x); }
+CEC	double	OP ""⁰⁵	( unsigned long long x) { return root(x); }
 
 CE void Double_test()
 {
+        static_assert( sgn( 123.,  124.) ==  123., "*");
+        static_assert( sgn( 123., -124.) == -123., "*");
+        static_assert( sgn( 123.,  123.) ==  123., "*");
+        static_assert( sgn(-123., -123.) ==  123., "*");
+        static_assert( sgn( 123.,   -0.) ==  123., "*");
+        static_assert( sgn( 123.,    0.) ==  123., "*");
+
         CE double a   = 0.00000000000000000001;
         CE Double a_m = a * 10;
         CE Double a_p = a+a+a+a+a+a+a+a+a+a;
@@ -324,113 +391,123 @@ CE void Double_test()
         AUTO       eter = bit_cast< double>( erwerwe );
         AUTO       ghjg = numeric_limits< double>::epsilon() / ( uint64_t(1) << 55);
 
-        static_assert( -0.0d ==~ 0.0d, "***");
-        static_assert( !(a_m ==  a_p), "***");
-        static_assert(   a_m !=  a_p , "***");
-        static_assert(   a_m ==~ a_p , "***");
-        static_assert( !(a_m <=  a_p), "***");
-        static_assert( !(a_p >=  a_m), "***");
-        static_assert(   a_m <=~ a_p , "***");
-        static_assert(   a_m >=~ a_p , "***");
-        static_assert(   a_p <=~ a_m , "***");
-        static_assert(   a_p >=~ a_m , "***");
+        static_assert( -0.0_d==~ 0.0_d					,"*");
+        static_assert( !(a_m ==  a_p)					,"*");
+        static_assert(   a_m !=  a_p					,"*");
+        static_assert(   a_m ==~ a_p					,"*");
+        static_assert( !(a_m <=  a_p)					,"*");
+        static_assert( !(a_p >=  a_m)					,"*");
+        static_assert(   a_m <=~ a_p					,"*");
+        static_assert(   a_m >=~ a_p					,"*");
+        static_assert(   a_p <=~ a_m					,"*");
+        static_assert(   a_p >=~ a_m					,"*");
 
-        static_assert(     isfinite( Double::max           ), "***");
-        static_assert(     isfinite( Double::lowest        ), "***");
-        static_assert( not isfinite( Double::infinity      ), "***");
-        static_assert( not isfinite( Double::quiet_NaN     ), "***");
-        static_assert( not isfinite( Double::signaling_NaN ), "***");
+        static_assert(     isfinite( Double::max		)	,"*");
+        static_assert(     isfinite( Double::lowest		)	,"*");
+        static_assert( not isfinite( Double::infinity		)	,"*");
+        static_assert( not isfinite( Double::quiet_NaN		)	,"*");
+        static_assert( not isfinite( Double::signaling_NaN	)	,"*");
 
-        //static_assert( about_0( vsv)	, "***");
-        //static_assert( vsv ==~ 0d	, "***");
-        static_assert( abs( -.125d) == .125, "***");
-        static_assert( root( 152.41383936d ) ==~  12.3456d, "***");
-        static_assert( root( ²(5678.2023d) ) == 5678.2023d, "***");
-        static_assert( .122999999999999999 !=  .12300000000000001d, "***");
-        static_assert( .122999999999999999 ==~ .12300000000000001d, "***");
-        static_assert( ! 0.		, "***");
-        static_assert(    double( vsv)	, "***");
-        //static_assert( ! ~Double( vsv)	, "***");
-        static_assert( ~1d == .1 * 10	, "***");
-        static_assert( 1. == Double(.1 * 10), "***");
+        //static_assert( near_0( vsv)					,"*");
+        //static_assert( vsv ==~ 0d					,"*");
+        static_assert( abs( -.125_d) == .125				,"*");
+        static_assert( root(  152.41383936_d ) ==~  12.3456_d		,"*");
+        static_assert( root(²(5678.2023_d) ) == 5678.2023_d		,"*");
+        static_assert( root(  5678.2023²   ) == 5678.2023		,"*");
+
+        static_assert(   .122999999999999999 !=  .12300000000000001_d	,"*");
+        static_assert(   .122999999999999999 ==~ .12300000000000001_d	,"*");
+        static_assert(   .122999999999999999 <   .12300000000000001_d	,"*");
+        static_assert( !(.122999999999999999 < ~ .12300000000000001_d)	,"*");
+        static_assert(   .1229999999999999   < ~ .12300000000000001_d	,"*");
+        static_assert(   .122999999999999999 <=~ .12300000000000001_d	,"*");
+
+        static_assert(   .12300000000000001 !=  .122999999999999999_d	,"*");
+        static_assert(   .12300000000000001 ==~ .122999999999999999_d	,"*");
+        static_assert(   .12300000000000001 >   .122999999999999999_d	,"*");
+        static_assert( !(.12300000000000001 > ~ .122999999999999999_d)	,"*");
+        static_assert(   .12300000000000001 > ~ .1229999999999999_d	,"*");
+        static_assert(   .12300000000000001 >=~ .122999999999999999_d	,"*");
+
+        static_assert( ! 0.						,"*");
+        static_assert(    double( vsv)					,"*");
+        //static_assert( ! ~Double( vsv)				,"*");
+        static_assert( ~1_d == .1 * 10					,"*");
+        static_assert( 1. == Double(.1 * 10)				,"*");
 }
 
 #pragma endregion
 
 #pragma region // Angle{}
 
-CE C double π = 3.14159265358979323846;
-CE C double operator ""π  (        long double a) { return π * a;                }
-CE C double operator ""π  ( unsigned long long a) { return π * a;                }
+struct Turn;
+
+CEC	double	π	                        = 3.14159265358979323846;
+CEC	double	OP ""π  (        long double a) { return π * a;}
+CEC	double	OP ""π  ( unsigned long long a) { return π * a;}
 
 // Угол
-struct Angle
+struct Angle    : Comparable	 < Angle>
+                , Near_comparable< Angle>
 {
-#pragma warning( push)
-#pragma warning( disable: 4146)
+        #define Self Angle
+        #pragma warning( push)
+        #pragma warning( disable: 4146)
 
         friend struct Turn; 
 
-        using Self = Angle;
-        using Val  = unsigned int;
+        using Val  = uint32_t;
 
 private:
         Val     val;
 STATIC  Val     semiturn = Val(1) << lastbit< Val>;
-STATIC  sgned< Self::Val> ε = 8;
+STATIC  sgned< Val> ε = 8;
 
 TINT    Self         ( INT        v ): val( v) {}
 
 public:
 EXPL    Self         ( C Turn&      );
-EXPL    Self         ( double radian): val(   sgned< longer< Val>>(  radian * (semiturn/π))
-                                            & Val( -1 )
-                                          ) {}
-EXPL OP double       (              ) C { return val * (π/semiturn)             ; }
-CE      bool    OP ==( CSelf&     r ) C { return val == r.val                   ; }
-CE	bool	near ( CSelf&     r ) C { return nabs( sign_cast( val - r.val)) > -ε; } // почти равный
-CE      Self    OP - (              ) C { return -val                           ; }
-CE      Val     OP / ( CSelf&     r ) C { return val / r.val                    ; }
-CE      Self    OP / ( double     r ) C { return sgned< Val>( double( val) / r ); }
-TINT    Self    OP / ( INT        r ) C { return           sign_cast( val) / r  ; }
-CE      Self    OP / ( unsigned   r ) C { return                      val  / r  ; }
+EXPL    Self         ( double radian): val( Val(-1) & sgned< longer< Val>>( radian * (semiturn/π)) ) {}
+EXPL OP C double     (              ) C { return val * (π/semiturn)		; }
+CEC     bool    OP ==( CSelf&     r ) C { return val == r.val			; }
+CEC     bool    OP < ( CSelf&     r ) C { return val <  r.val			; }
+CEC	bool	near ( CSelf&     r ) C { return nabs( sign_cast(val-r.val))>-ε	; } // почти равный
+CEC	bool	near_greater(CSelf&r) C { return       sign_cast(val-r.val) <-ε	; } // почти равный и больше
+CEC	bool	near_less   (CSelf&r) C { return       sign_cast(val-r.val) > ε	; } // почти равный и меньше
+CEC     Self    OP - (              ) C { return -val				; }
+CEC     Val*    OP & (              ) C { return &val				; }
 
-CE      Self&   OP +=( CSelf&     r )   { val += r.val; return self; }
-CE      Self&   OP -=( CSelf&     r )   { val -= r.val; return self; }
-TINT    Self&   OP *=( INT        r )   { val *= r    ; return self; }
-TINT    Self&   OP /=( INT        r )   { val /= r    ; return self; }
-CE      Self&   OP *=( double     r )   { val *= r    ; return self; }
-        void    print( ostream&   os) C
-        {
-                os << ( val * (180./semiturn)) << '°';
-        };
+CEC     Self    OP + ( CSelf&     r ) C { return val + r.val                    ; }
+CEC     Self    OP - ( CSelf&     r ) C { return val - r.val                    ; }
+CEC     Self    OP * ( double     r ) C { return Val( val * r )                 ; }
+CEC     Self    OP / ( double     r ) C { return sgned< Val>( val / r )         ; }
+TINT C  Self    OP * ( INT        r ) C { return val * r                        ; }
+TINT C  Self    OP / ( INT        r ) C { return sign_cast( val) / r            ; }
+CEC     Self    OP / ( unsigned   r ) C { return            val  / r            ; }
+CEC     Val     OP / ( CSelf&     r ) C { return val / r.val                    ; }
+        void    print( ostream&   os) C { os << ( val * (180./semiturn)) << '°' ; }
 
-FRIEND  Self    OP ""ᵒ( unsigned long long);
-FRIEND  Self    OP ""ᵒ( long double       );
-#pragma warning( pop)
+FRIEND  Self    OP ""ᵒ( unsigned long long gradus);
+FRIEND  Self    OP ""ᵒ(        long double gradus);
+        #pragma warning( pop)
+        #undef Self
 };
 
-OPS_C( +, Angle)
-OPS_Ȼ( -, Angle)
-OPS_C( *, Angle)
-
-CE Angle OP ""ᵒ ( unsigned long long x)
+CEC Angle OP ""ᵒ ( unsigned long long gradus)
 {
-        return Angle::Val( x * Angle::semiturn / 180
-                         & Angle::Val( -1)
-                         );
+        using Val = Angle::Val;
+        return Val( Val(-1) & (Angle::semiturn * gradus / 180) );
 };
-CE Angle OP ""ᵒ (        long double x)
+CEC Angle OP ""ᵒ (        long double gradus)
 {
-        return Angle::Val( longer< Angle::Val>( long double( Angle::semiturn) / 180 * x)
-                         & Angle::Val( -1)
-                         );
+        using Val = Angle::Val;
+        return Val( Val(-1) & longer< Val>( static_cast< long double>(Angle::semiturn) * gradus / 180) );
 };
 
 CE void test_Angle()
 {
-#pragma warning( push)
-#pragma warning( disable: 4146)
+        #pragma warning( push)
+        #pragma warning( disable: 4146)
         static_assert( Angle(-π   ) ==  180ᵒ, "***" );
         static_assert( Angle(-π/ 2) ==  270ᵒ, "***" );
         static_assert( Angle(5π   ) ==  180ᵒ, "***" );
@@ -469,7 +546,7 @@ CE void test_Angle()
         static_assert(   90ᵒ /  10ᵒ ==    9 , "***" );
         static_assert(  -90ᵒ /  10ᵒ ==   27 , "***" );
         //static_assert( -90ᵒ  / -10ᵒ ==    9 , "***" );
-#pragma warning( pop)
+        #pragma warning( pop)
 }
 #pragma endregion
 
@@ -477,9 +554,9 @@ CE void test_Angle()
 // Оборот
 struct Turn
 {
+        #define Self Turn
         friend struct Angle; 
 
-        using Self = Turn;
         using Val  = sgned< longer< Angle::Val>>;
 
 private:
@@ -490,37 +567,32 @@ public:
 CE      Self            ( Angle  x): val( x.val       ) {}
 CE      Self            ( double x): val( x * one_turn) {}
 TINT    Self            ( INT    x): val( x * one_turn) {}
-CE   OP double          (         ) C { return double(val) / one_turn; }
-TINT OP INT             (         ) C { return        val  / one_turn; }
+CEOP  C double          (         ) C { return double(val) / one_turn; }
+TINT OP C INT           (         ) C { return        val  / one_turn; }
 
-CE      Self    OP -    (         ) C { return { ф, -val }; }
-CE      Val     OP /    ( CSelf& r) C { return val / r.val; }
-CE      Self    OP /    ( double r) C { return double( self) / r; }
-
-CE      Self&   OP +=   ( CSelf& r)   { val += r.val; return self; }
-CE      Self&   OP -=   ( CSelf& r)   { val -= r.val; return self; }
-TINT    Self&   OP *=   ( INT    r)   { val *= r    ; return self; }
-TINT    Self&   OP /=   ( INT    r)   { val /= r    ; return self; }
-CE      Self&   OP *=   ( double r)   { val *= r    ; return self; }
+CEC     Self    OP -    (         ) C { return { ф,-val         }; }
+CEC     Self    OP +    ( CSelf& r) C { return { ф, val + r.val }; }
+CEC     Self    OP -    ( CSelf& r) C { return { ф, val - r.val }; }
+CEC     Self    OP *    ( double r) C { return { ф, Val( val*r) }; }
+CEC     Self    OP /    ( double r) C { return sgned< Val>( double(val) / r ); }
+TINT C  Self    OP *    ( INT    r) C { return { ф, val * r     }; }
+TINT C  Self    OP /    ( INT    r) C { return { ф, val / r     }; }
+CEC     Val     OP /    ( CSelf& r) C { return      val / r.val  ; }
         void    print   ( ostream& os) C
         {
                 os << double( val) << " turn";
-        };
+        }
+        #undef Self
 };
 
-OPS_C( +, Turn )
-OPS_Ȼ( -, Turn )
-OPS_C( *, Turn )
+CEC Turn OP ""turn ( unsigned long long x) { return         x ; };
+CEC Turn OP ""turn ( long double        x) { return double( x); };
+AUTO     OP ""τ    ( unsigned long long x) { return OP ""turn ( x); };
+AUTO     OP ""τ    ( long double        x) { return OP ""turn ( x); };
 
-CE Turn OP ""turn ( unsigned long long x) { return         x ; };
-CE Turn OP ""turn ( long double        x) { return double( x); };
-AUTO    OP ""τ    ( unsigned long long x) { return OP ""turn ( x); };
-AUTO    OP ""τ    ( long double        x) { return OP ""turn ( x); };
+CE Angle::Angle( C Turn &x): val( x.val) {}
 
-CE Angle::Angle( Turn C &x): val( x.val)
-{}
-
-void test_Turn()
+CE void test_Turn()
 {
 #pragma warning( push)
 #pragma warning( disable: 4146)
@@ -534,38 +606,61 @@ void test_Turn()
 }
 #pragma endregion
 
-#pragma region // Комплексные Числа ℂ{}, ℂ₁{}
+#pragma region // Комплексные Числа Co{}, C͡o{}
 
-C class 𝐈{} 𝐢; // самая мнимая единица на свете (настолько мнимая, что даже память не занимает!)
+struct  𝟏_t;	// комплексная единица
+struct ˗𝟏_t;	// комплексная минус единица
+struct  𝐢_t;	// мнимая единица
+struct ˗𝐢_t;	// мнимая минус единица
 
-struct ℂ;
-struct ℂ₁;
-
-// Комплексное Число, но есть нюанс...
-struct ℂ
+template< typename Self>
+struct Complex_function
 {
-        using Self = ℂ;
+        // унарный минус
+        FRIEND  Self    OP -( CSelf& z) { return {ф, -z.re(), -z.im() }; }
+        FRIEND  Self    conj( CSelf& z) { return {ф,  z.re(), -z.im() }; }
+        FRIEND  Self    root( CSelf& z) // корень квадратный
+        {
+                const auto ǀzǀ = z.abs();
+                return  { ф
+                        ,      root( (ǀzǀ + z.re())/2 ) 
+                        , sgn( root( (ǀzǀ - z.re())/2 ), z.im())
+                        };
+        }
+};
 
+// Комплексное Число
+struct Co       :
+#define Self Co
+          Arith_function	< Self		>
+        , Complex_function	< Self		>
+        , Comparable		< Self		>
+        , Near_comparable	< Self		>
+        , Arith_assign_operators< Self		>
+        , Arith_binary_operators< Self, double	>
+        , Arith_binary_operators< Self,  𝐢_t	>
+        , Arith_binary_operators< Self, ˗𝐢_t	>
+        , Arith_binary_operators< Self,  𝟏_t	>
+        , Arith_binary_operators< Self, ˗𝟏_t	>
+{
 protected:
         Double  r, i;
-CE      void    swap() { double r1 = r; r = i; i = r1; }
 
 public:
-CE      Self( 𝐈                 ): r( 0 ), i( 1 ) {}
-EXPL    Self( double s          ): r( s ), i( 0 ) {}
 CE      Self( double r, double i): r( r ), i( i ) {}
+CE      Self( const Self& z     ): Self(z.r, z.i) {}
+CE      Self(Ф,double r,double i): Self(  r,   i) {} // для унификации с C͡o
+CE      Self( double s          ): Self(  s,   0) {}
 
-CE      double  abs² () C { return  r*r + i*i      ;} // абсолютная величина в квадрате
-CE      double  abs  () C { return ::root( abs²()) ;} // абсолютная величина
-CE      Self    OP - () C { return { -r, -i }      ;} // унарный минус
-CE      Self    conj () C { return {  r, -i }      ;} // Сопряжённое (conjugate) число
-CE      Self    recip() C { return conj() /= abs²();} // 1/z - обратная величина (reciprocal, multiplicative inverse)
-CE      Self    ⅟   () C { return recip()         ;} // 1/z - обратная величина (reciprocal, multiplicative inverse)
-CE      double  re   () C { return r               ;} // действительная часть
-CE      double  im   () C { return i               ;} // мнимая часть
-CE      double  ℜ   () C { return r               ;} // действительная часть
-CE      double  ℑ    () C { return i               ;} // мнимая часть
-CE      Angle   arg  () C
+CEC     double  abs²	() C { return  r*r + i*i     ; } // абсолютная величина в квадрате
+CEC     double  abs	() C { return root( abs²())  ; } // абсолютная величина
+CEC     Self    conj	() C { return {  r, -i }     ; } // Сопряжённое (conjugate) число
+CEC     Self    recip	() C { return conj() / abs²(); } // 1/z - обратная величина (reciprocal, multiplicative inverse)
+CEC     double  re	() C { return r              ; } // действительная часть
+CEC     double  im	() C { return i              ; } // мнимая часть
+CEC     double  ℜ	() C { return r              ; } // действительная часть
+CEC     double  ℑ	() C { return i              ; } // мнимая часть
+CEC     Angle   arg	() C
         {
                 if( r > +0. ) return Angle( atan( i / r ));
                 if( r < -0. ) return Angle( atan( i / r ) + π);
@@ -575,25 +670,17 @@ CE      Angle   arg  () C
 
                 return Angle( NAN);
         }
-CE      Self    root () C // корень квадратный
-        {
-                double abs1 = abs();
-                Self res = { ::root( (abs1 + r)/2 ) 
-                           , ::root( (abs1 - r)/2 )
-                           };
-                res.i.revsign( i);
-                return res;
-        }
 
-        FN( abs²); FN( abs); FN( conj); FN( recip); FN( ⅟); FN( re); FN( im); FN( ℜ); FN( ℑ); FN( arg); FN( root);
+        FN( re); FN( im); FN( ℜ); FN( ℑ); FN( arg);
 
-CE      bool    OP ==( CSelf& z) C { return r ==  z.r && i ==  z.i;}
-CE	bool	near ( CSelf& z) C { return r ==~ z.r && i ==~ z.i;} // почти равный
+CEC     bool    OP ==( CSelf& z) C { return r  ==  z.r  && i  ==  z.i     ; }
+CEC	bool	near ( CSelf& z) C { return r.near(z.r) && i.near(z.i)    ; } // почти равный
 
-CE      Self&   OP +=( CSelf& z)   { r+=z.r; i+=z.i; return self; }
-CE      Self&   OP -=( CSelf& z)   { r-=z.r; i-=z.i; return self; }
+CEC     Self    OP + ( CSelf& z) C { return {r     + z.r  , i     + z.i  }; }
+CEC     Self    OP * ( CSelf& z) C { return {r*z.r - i*z.i, i*z.r + r*z.i}; }
+CEC     Self    OP / ( CSelf& z) C { return (self * z.conj()) / z.abs²()  ; } // Деление КЧ на другое КЧ
 /*
-CE      Self    OP * ( CSelf& z) C
+CEC     Self    OP * ( CSelf& z) C
         {
                 double a = (r + i) * (z.r + z.i);
                 double b = r * z.r;
@@ -603,39 +690,30 @@ CE      Self    OP * ( CSelf& z) C
                         , a - b - c
                         };
         }
-CE      Self&   OP *=( CSelf& z)   { return (self  = self * z );  }
 */
-CE      Self&   OP *=( CSelf& z)
-        {
-                Self r90 = {-i, r}; // поворот на 90° *this;
-                r90     *= z.i;
-                self    *= z.r;
-                self    += r90;
-                return self;
-        }
-//CE      Self&   OP /=( CSelf& z)   { return (self *= z.recip()) ; } // Деление КЧ на другое КЧ
-CE      Self    OP / ( CSelf& z) C // Деление КЧ на другое КЧ
-        {
-                Self res = { r*z.r + i*z.i
-                           , i*z.r - r*z.i
-                           };
-                return res /= z.abs²();
-        }
-CE      Self&   OP /=( CSelf& z)   { return (self  = self / z );  }
-CE      Self&   OP /=( C ℂ₁& n);                                   // Деление КЧ на единичное КЧ дает КЧ
 
-CE      Self&   OP +=( double s)   { r += s;         return self; }
-CE      Self&   OP -=( double s)   { r -= s;         return self; }
-CE      Self&   OP *=( double s)   { r *= s; i *= s; return self; } // Умножение на скаляр
-CE      Self&   OP /=( double s)   { r /= s; i /= s; return self; } // Деление на скаляр
+CEC     Self    OP + ( double s) C { return {r + s, i    }; }
+CEC     Self    OP * ( double s) C { return {r * s, i * s}; } // Умножение на скаляр
+CEC     Self    OP / ( double s) C { return {r / s, i / s}; } // Деление на скаляр
 
-CE      Self&   OP *=( C 𝐈&    )   { swap(); r = -r; return self; } // Умножение на мнимую
-CE      Self&   OP /=( C 𝐈&    )   { swap(); i = -i; return self; } // Деление на мнимую
+CEC     Self    OP + ( C  𝐢_t& ) C { return {  r  , i + 1}; }
+CEC     Self    OP * ( C  𝐢_t& ) C { return { -i  , r    }; } // Умножение на мнимую
+CEC     Self    OP / ( C  𝐢_t& ) C { return {  i  ,-r    }; } // Деление на мнимую
+CEC     Self    OP + ( C ˗𝐢_t& ) C { return {  r  , i - 1}; }
+CEC     Self    OP * ( C ˗𝐢_t& ) C { return {  i  ,-r    }; } // Умножение на мнимую
+CEC     Self    OP / ( C ˗𝐢_t& ) C { return { -i  , r    }; } // Деление на мнимую
 
-        // на время представим, что комплексные числа это векторы...
+CEC     Self    OP + ( C  𝟏_t& ) C { return  self + 1; }
+CEC     Self    OP * ( C  𝟏_t& ) C { return  self    ; }
+CEC     Self    OP / ( C  𝟏_t& ) C { return  self    ; }
+CEC     Self    OP + ( C ˗𝟏_t& ) C { return  self - 1; }
+CEC     Self    OP * ( C ˗𝟏_t& ) C { return -self    ; }
+CEC     Self    OP / ( C ˗𝟏_t& ) C { return -self    ; }
+
+// на время представим, что комплексные числа это векторы...
         // Скалярное произведение (Inner product)
-CE      double  OP , ( CSelf& v) C { return  r*v.r + i*v.i; }
-CE      double  OP ^ ( CSelf& v) C { return  r*v.i - i*v.r; } // Псевдоскалярное, Векторное, косое произведение (Outer, cross product)
+CEC     double  OP , ( CSelf& v) C { return  r*v.r + i*v.i; }
+CEC     double  OP ^ ( CSelf& v) C { return  r*v.i - i*v.r; } // Псевдоскалярное, Векторное, косое произведение (Outer, cross product)
 
         void    print( ostream& os) C
         {
@@ -646,117 +724,202 @@ CE      double  OP ^ ( CSelf& v) C { return  r*v.i - i*v.r; } // Псевдос�
                         last = self;
                 }
         };
+#undef Self
 };
 
-OPS_ARITH( ℂ )
-
-// Единичное Комплексное Число (Unit Complex Number). ℂ₁ = {𝑧 ∈ ℂ: |𝑧| = 1}
-struct ℂ₁: public ℂ
+CE void test_Co()
 {
-        using Self  = ℂ₁;
-        using Super = ℂ;
+        CE Co z = {3, 4};
+        static_assert( abs ( z) == 5		, "*");
+        static_assert( abs²( z) == 25		, "*");
+        static_assert( root( z) == Co( 2, 1)	, "*");
+        static_assert( z + 1 == Co( 4	, 4   )	, "*");
+        static_assert( 1 + z == Co( 4	, 4   )	, "*");
+        static_assert( z * 2 == Co( 6	, 8   )	, "*");
+        static_assert( 2 * z == Co( 6	, 8   )	, "*");
+        static_assert( z / 2 == Co( 1.5	, 2   )	, "*");
+        static_assert( 2 / z == Co( 0.24,-0.32)	, "*");
+        static_assert( z + 1.== Co( 4	, 4   )	, "*");
+        static_assert( 1.+ z == Co( 4	, 4   )	, "*");
+        static_assert( z * 2.== Co( 6	, 8   )	, "*");
+        static_assert( 2.* z == Co( 6	, 8   )	, "*");
+        static_assert( z / 2.== Co( 1.5	, 2   )	, "*");
+        static_assert( 2./ z == Co( 0.24,-0.32)	, "*");
+        static_assert( z / z == 1		, "*");
+        //static_assert( (Co( z) -= 1) == Co(2, 4), "*");
+        //static_assert( (Co( z) /= 1) == z	, "*");
+        //static_assert( (Co(-z) += z) == 0	, "*");
+        static_assert(  -z != z			, "*");
+        static_assert(   z != 1			, "*");
+        static_assert(   1 != z			, "*");
+        static_assert( !(1 == z)		, "*");
+}
 
-#ifndef NDEBUG
-CE      Self( Ф, double r, double i): Super( r, i) {}
-#endif
-private:
-CE      Self( double r, double i): Super( r, i) {}
+// Единичное Комплексное Число (Unit Complex Number). C͡o = {𝑧 ∈ ℂ: |𝑧| = 1}
+struct C͡o: Co
+#define Self C͡o
+        , Arith_function	< Self		>
+        , Complex_function	< Self		>
+        , Mul_div_assign_operators< Self	>
+        , Mul_div_operators	< Self,  𝟏_t	>
+        , Mul_div_operators	< Self, ˗𝟏_t	>
+        , Mul_div_operators	< Self,  𝐢_t	>
+        , Mul_div_operators	< Self, ˗𝐢_t	>
+        , Mul_div_operators	< Self, Co	>
+        , Mul_div_operators	< Self, double	>
+{
+protected:
+CE      Self( double r, double i): Co( r, i) {}
 
 public:
-CE      Self( 𝐈          ): Super( 0., 1.                               ) {}
-EXPL    Self( C Super& z ): Super( z / z.abs()                          ) {}
-EXPL    Self(Ф,C Super&z ): Super( z                                    ) {} // мамой клянусь - |z| == 1
-EXPL    Self( double sin ): Super( ::root( 1. - sin*sin), sin           ) {}        
-CE      Self( Angle    𝜑 ): Super( cos( double( 𝜑)), sin( double( 𝜑))  ) {} // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
+CE      Self( Ф, C Co& z ): Co( z                                    ) { /*assert( z.abs²()  == 1.);*/ } // мамой клянусь - |z| = 1
+CE      Self( Ф, double r
+               , double i): Co( r, i                                 ) { /*assert( r*r + i*i == 1.);*/ } // мамой клянусь - |r + i𝑖| = 1
+EXPL    Self(    C Co& z ): Co( z / z.abs()                          ) {}
+CE      Self( double sin ): Co( ::root( 1. - sin*sin), sin           ) {}
+CE      Self( Angle    𝜑 ): Co( cos( double( 𝜑)), sin( double( 𝜑))  ) {} // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
 
-CE      double  abs² () C { return     1.   ; } // абсолютная величина в квадрате = 1
-CE      double  abs  () C { return     1.   ; } // абсолютная величина = 1, этож единичное число ;)
-CE      Self    OP - () C { return {-r, -i }; } // унарный минус (ЕКЧ = -ЕКЧ)
-CE      Self    conj () C { return { r, -i }; } // Сопряжённое (conjugate) число
-CE      Self    recip() C { return { r, -i }; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
-CE      Self    ⅟   () C { return recip()  ; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
-CE      double  ψarg () C { double x1 = r + 1.; return i>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
-CE      Self    root () C
-        {
-                double i0 = ::root( (1. - r)/2 );
-                if( i < 0 )
-                        i0 = -i0;
-                return { ::root( (1. + r)/2 )
-                       , i0
-                       };
-        }
-        FN( abs²); FN( abs); FN( conj); FN( recip); FN( ⅟); FN( ψarg); FN( root);
+CEC     double  abs² () C { return     1.   ; } // абсолютная величина в квадрате = 1
+CEC     double  abs  () C { return     1.   ; } // абсолютная величина = 1, этож единичное число ;-)
+CEC     Self    conj () C { return { r, -i }; } // Сопряжённое (conjugate) число
+CEC     Self    recip() C { return { r, -i }; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
+//CEC     double  ψarg () C { double x1 = r + 1.; return i>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
+CEC     double  ψarg () C { return sgn( r+1., -i);} // псевдоугол (для сравнений)
+        FN( ψarg);
 
-CE      bool    OP > ( CSelf& z) C { return ψarg() > z.ψarg();}
-CE      bool    OP < ( CSelf& z) C { return ψarg() < z.ψarg();}
+CEC     bool    OP < ( CSelf& z) C { return ψarg() < z.ψarg()   ; }
+CEC     Self    OP * ( CSelf& z) C { return {ф, Co::OP *(z) }   ; } // ЕКЧ*ЕКЧ = ЕКЧ
+CEC     Self    OP / ( CSelf& z) C { return self * z.conj()     ; } // ЕКЧ/ЕКЧ = ЕКЧ, при этом деление вырождено
 
-CE      Self&   OP *=( CSelf& z)   { Super::OP *=( z); return self; } // ЕКЧ*ЕКЧ = ЕКЧ
-CE      Self&   OP /=( CSelf& z)   { return (self *= z.conj())    ; } // ЕКЧ/ЕКЧ = ЕКЧ, при этом само деление вырождено
-CE      ℂ&     OP /=( C ℂ& z )   { return ℂ::OP /=( z)          ; } // КЧ/ЕКЧ = КЧ
+CEC     Self    OP * ( C  𝟏_t& ) C { return  self; }
+CEC     Self    OP / ( C  𝟏_t& ) C { return  self; }
+CEC     Self    OP * ( C ˗𝟏_t& ) C { return -self; }
+CEC     Self    OP / ( C ˗𝟏_t& ) C { return -self; }
 
-CE      Self&   OP *=( C 𝐈&    )   { swap(); r = -r; return self; } // Умножение на мнимую
-CE      Self&   OP /=( C 𝐈&    )   { swap(); i = -i; return self; } // Деление на мнимую
+CEC     Self    OP * ( C  𝐢_t& ) C { return {-i, r}; }
+CEC     Self    OP / ( C  𝐢_t& ) C { return { i,-r}; }
+CEC     Self    OP * ( C ˗𝐢_t& ) C { return { i,-r}; }
+CEC     Self    OP / ( C ˗𝐢_t& ) C { return {-i, r}; }
 
-static  CSelf   𝟏;
-static  CSelf   𝐢;
+CEC     Co      OP * ( C Co&  z) C { return Co::OP *(z); } // ЕКЧ*КЧ = КЧ
+CEC     Co      OP / ( C Co&  z) C { return Co::OP /(z); } // ЕКЧ/КЧ = КЧ
+CEC     Co      OP * ( double x) C { return Co::OP *(x); } // ЕКЧ* Ч = КЧ
+CEC     Co      OP / ( double x) C { return Co::OP /(x); } // ЕКЧ/ Ч = КЧ
+#undef Self
 };
 
-OPS_C( *, ℂ₁)
-OPS_Ȼ( /, ℂ₁)
+struct  𝟏_t: C͡o {	CE  𝟏_t	(): C͡o(  1.,  0.) {};  CEC ˗𝟏_t	OP - () C;   }; // комплексная единица
+struct ˗𝟏_t: C͡o {	CE ˗𝟏_t	(): C͡o( -1.,  0.) {};  CEC  𝟏_t	OP - () C;   }; // комплексная минус единица
+struct  𝐢_t: C͡o {	CE  𝐢_t	(): C͡o(  0.,  1.) {};  CEC ˗𝐢_t	OP - () C;   }; // мнимая единица
+struct ˗𝐢_t: C͡o {	CE ˗𝐢_t	(): C͡o(  0., -1.) {};  CEC  𝐢_t	OP - () C;   }; // мнимая минус единица
 
-CE ℂ& ℂ::OP /=( C ℂ₁& n) 
-{       return (self *= n.recip()); }
+CEC ˗𝟏_t  𝟏_t::OP - () C { return {}; };
+CEC  𝟏_t ˗𝟏_t::OP - () C { return {}; };
+CEC ˗𝐢_t   𝐢_t::OP - () C { return {}; };
+CEC  𝐢_t  ˗𝐢_t::OP - () C { return {}; };
 
-// комплексная единица (единичная, естественно)
-CE C ℂ₁ ℂ₁::𝟏 = { 1., 0. };
-// комплексная мнимая единица
-CE C ℂ₁ ℂ₁::𝐢 = { 0., 1. };
+CEC 𝟏_t	root( C  𝟏_t& ) { return {}; }
+CEC 𝐢_t	root( C ˗𝟏_t& ) { return {}; }
 
-// единица
-CE C ℂ₁ 𝟏 = ℂ₁::𝟏;
+CEC 𝟏_t	𝟏;	// комплексная единица
+CEC 𝐢_t	𝐢;	// мнимая единица
+CEC Co	OP ""𝐢 ( unsigned long long a) { return { 0., double(a)}; }
+CEC Co	OP ""𝐢 (        long double a) { return { 0., double(a)}; }
 
-CE ℂ OP ""𝐢 ( unsigned long long a) { return { 0., double(a)}; }
-CE ℂ OP ""𝐢 (        long double a) { return { 0., double(a)}; }
-
-AUTO OP -( 𝐈 ) { return      -ℂ₁::𝐢 ; }
-AUTO root( 𝐈 ) { return root( ℂ₁::𝐢); }
-
-void   ℂ_test()
+CE void test_C͡o()
 {
-        static_assert( root( -𝟏) == 𝐢                                   , "***");
-        static_assert( root( -𝐢) == conj( root( 𝐢))                     , "***");
-        static_assert( (5 + 𝐢)*(7 - 6𝐢) / (3 + 𝐢)          == (10 - 11𝐢), "***");
-        static_assert( (4 + 𝐢)*(5 + 3𝐢) + (3 + 𝐢)*(3 - 2𝐢) == (28 + 14𝐢), "***");
+        CE Co z( 3, 4);
+        CE C͡o ẑ( ф, 0., 1.);
 
-        // это просто должно скомпилиться
-        AUTO    a0 = ℂ₁( 0.1 ) * ℂ( 0, 1 );
-        CE ℂ₁ u0 = 𝐢;
-        CE ℂ₁ u1 = 𝟏 / 𝐢;
-        CE ℂ  u2 = ℂ₁( 0.1 ) *= 𝐢;
-        CE ℂ₁ u3 = ℂ₁( 0.1 );
-        CE ℂ₁ u4 = u3 * ℂ₁( 0.1 ) / 𝐢;
-        CE ℂ₁ u5 = 𝟏/ℂ₁( 0.1 );
-        CE ℂ₁ u6 = 𝟏*ℂ₁( 0.1 );
-        CE ℂ  u7 = ℂ( 0, 1 ) * ℂ( 0.995, 0.1 ) ;
-        CE ℂ₁ u8 = 𝐢 * ℂ₁( 0.1 );
-        CE ℂ  u9 = u7 / u8;
-        CE ℂ  ua = u8 / u7;
-        CE ℂ  ub = u7 + u9;
-        CE ℂ  uc = u7 * 9;
+        AUTO minus_ẑ = -ẑ;
+        static_assert( is_same< decltype(minus_ẑ), C C͡o>::value	, "*");
+        static_assert( minus_ẑ == Co( 0, -1)			, "*");
 
-        CE ℂ₁ a = ℂ₁( 0.1);
-        static_assert( a / ℂ(3, -2) == ℂ( 0.2142278701015276898, 0.1761519134010184617), "***");
-        static_assert(      a > 𝟏 && !(      a < 𝟏), "***");
-        static_assert( conj(a)> 𝟏 && !( conj(a)< 𝟏), "***");
-        static_assert( conj(a)> a && !( conj(a)< a), "***");
-        static_assert( a*𝐢*𝐢*𝐢 > a && !( a*𝐢*𝐢*𝐢 < a), "***");
+        AUTO my_i = root( -𝟏 );
+        static_assert( is_same< decltype( my_i	), C 𝐢_t>::value	, "*");
+        static_assert( my_i == 𝐢					, "*");
 
-        static_assert( arg(0 + 𝐢) ==  90ᵒ, "***");
-        static_assert( arg(0 - 𝐢) == 270ᵒ, "***");
+        static_assert( root( -𝟏		) == 𝐢			, "*");
+        static_assert( root( -1 + 0𝐢	) == 𝐢			, "*");
+        static_assert( root( -𝐢		) == conj( root( 𝐢))	, "*");
+
+        static_assert( is_same< decltype( ẑ * 𝐢	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( ẑ / 𝐢	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( 𝐢 * ẑ	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( 𝐢 / ẑ	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( ẑ * 𝟏	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( ẑ / 𝟏	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( 𝟏 * ẑ	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( 𝟏 / ẑ	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( ẑ * ẑ	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( ẑ / ẑ	), C C͡o>::value	, "*");
+        static_assert( is_same< decltype( z * ẑ	), C Co>::value	, "*");
+        static_assert( is_same< decltype( z / ẑ	), C Co>::value	, "*");
+        static_assert( is_same< decltype( ẑ * z	), C Co>::value	, "*");
+        static_assert( is_same< decltype( ẑ / z	), C Co>::value	, "*");
+        static_assert( ẑ * ẑ == -1				, "*");
+        static_assert( ẑ / ẑ ==  1				, "*");
+        static_assert( z * ẑ == Co(-4   , 3   )			, "*");
+        static_assert( z / ẑ == Co( 4   ,-3   )			, "*");
+        static_assert( ẑ * z == Co(-4   , 3   )			, "*");
+        static_assert( ẑ / z == Co( 0.16, 0.12)			, "*");
+
+        static_assert( ẑ + 1 == Co( 1	, 1   )			, "*");
+        static_assert( 1 + ẑ == Co( 1	, 1   )			, "*");
+        static_assert( ẑ * 2 == Co( 0	, 2   )			, "*");
+        static_assert( 2 * ẑ == Co( 0	, 2   )			, "*");
+        static_assert( ẑ / 2 == Co( 0	, 0.5 )			, "*");
+        static_assert( 2 / ẑ == Co( 0	,-2   )			, "*");
+        static_assert( ẑ + 1.== Co( 1	, 1   )			, "*");
+        static_assert( 1.+ ẑ == Co( 1	, 1   )			, "*");
+        static_assert( ẑ * 2.== Co( 0	, 2   )			, "*");
+        static_assert( 2.* ẑ == Co( 0	, 2   )			, "*");
+        static_assert( ẑ / 2.== Co( 0	, 0.5 )			, "*");
+        static_assert( 2./ ẑ == Co( 0	,-2   )			, "*");
+        /*
+        AUTO ŵ = C͡o(ẑ) /= ẑ;
+        AUTO û = C͡o(ẑ) *= ẑ;
+        static_assert( is_same< decltype(ŵ), C C͡o>::value	, "*");
+        static_assert( is_same< decltype(û), C C͡o>::value	, "*");
+        static_assert( ŵ ==  1					, "*");
+        static_assert( û == -1					, "*");
+
+        static_assert( (C͡o( ẑ) -= 1) == Co(-1, 1)		, "*");
+        static_assert( (C͡o( ẑ) /= 1) == ẑ			, "*");
+        static_assert( (C͡o(-ẑ) += ẑ) == 0			, "*");
+        */
+        CE C͡o bad_ẑ( ф, 0.28, 100500);
+        static_assert( root(bad_ẑ) == Co( 0.8, 0.6)		, "*");
+        static_assert( abs (bad_ẑ) == 1				, "*");
+        static_assert( abs²(bad_ẑ) == 1				, "*");
+        static_assert( abs (    ẑ) == 1				, "*");
+        static_assert( abs²(    ẑ) == 1				, "*");
+        static_assert( 1 / bad_ẑ == conj(   bad_ẑ)		, "*");
+        static_assert( ẑ / bad_ẑ == conj(-ẑ*bad_ẑ)		, "*");
 }
+CE void test_Co_1()
+{
+        CE Co z = {3, 4};
+
+        static_assert( (5 + 𝐢)*(7 - 6𝐢)/(3+𝐢)		== (10 - 11𝐢)	, "*");
+        static_assert( (4 + 𝐢)*(5 + 3𝐢)+(3 + 𝐢)*(3 - 2𝐢)	== (28 + 14𝐢)	, "*");
+
+        static_assert( z + 𝐢 == Co( 3	, 5   )	, "*");
+        static_assert( 𝐢 + z == Co( 3	, 5   )	, "*");
+        static_assert( z - 𝐢 == Co( 3	, 3   )	, "*");
+        static_assert( 𝐢 - z == Co(-3	,-3   )	, "*");
+        static_assert( z * 𝐢 == Co(-4	, 3   )	, "*");
+        static_assert( 𝐢 * z == Co(-4	, 3   )	, "*");
+        static_assert( z / 𝐢 == Co( 4	,-3   )	, "*");
+        static_assert( 𝐢 / z == Co( 0.16, 0.12)	, "*");
+}
+
 #pragma endregion
 
-struct Line
+using ℂ  = Co;
+using ℂ₁ = C͡o;
+
+struct Line: Near_comparable< Line>
 {
         ℂ₁    n̂; // единичный (|n̂| = 1) перпедикуляр к прямой
         Double p; // растояние от начало координат до прямой
@@ -807,19 +970,19 @@ friend  ostream& OP<<( ostream &os, C Line& obj )
 struct Vertical: public Line
 {
         // Вертикаль пересекающая ось 𝑋 в точке x0
-CE      Vertical( double x0 ): Line( ℂ₁::𝟏, x0) {};
+CE      Vertical( double x0 ): Line( 𝟏, x0) {};
 };
 struct Horizontal: public Line
 {
         // Горизонталь пересекающая ось 𝑌 в точке y0
-CE      Horizontal( double y0 ): Line( ℂ₁::𝐢, y0) {};
+CE      Horizontal( double y0 ): Line( 𝐢, y0) {};
 };
-void   Line_test()
+CE void   Line_test()
 {
         CE Vertical l_test( 2 );
-        static_assert(       l_test.n̂        == 𝟏, "***");
-        static_assert(       l_test.n̂ * 𝐢    == 𝐢, "***");
-        static_assert( dist( l_test, {3, 1}) == 1, "***");
+        static_assert(       l_test.n̂		== 1,	"*");
+        static_assert(       l_test.n̂ * 𝐢	== 𝐢,	"*");
+        static_assert( dist( l_test, {3, 1})	== 1,	"*");
 }
 
 struct Segment: public Line
@@ -838,7 +1001,7 @@ CE      Segment( C Line& l, C ℂ& p1_, C ℂ& p2_ )
         {};
 
         // обмен концов (рисоваться будет в другую сторону)
-CE      Segment OP - () C { return Segment( this->p̅2, this->p̅1 ); }
+CE      Segment OP - () C { return { p̅2, p̅1 }; }
 
         void print( ostream& os) C
         {
@@ -846,7 +1009,7 @@ CE      Segment OP - () C { return Segment( this->p̅2, this->p̅1 ); }
         };
 };
 
-struct Circle
+struct Circle: Near_comparable< Circle>
 {
         ℂ     o̅; // центр окружности
         Double R; // радиус окружности
@@ -857,12 +1020,7 @@ CE      Circle	     ( C ℂ& center, double radius = 0. )
 
 CE      bool	OP ==( C Circle& c ) C { return R ==  c.R && o̅ ==  c.o̅; }
 CE	bool	near ( C Circle& c ) C { return R ==~ c.R && o̅ ==~ c.o̅; } // почти равный
-CE      Circle	OP - (             ) C
-        {
-                Circle a = self;
-                a.R = -a.R;
-                return a;
-        }
+CE      Circle	OP - (             ) C { return { o̅, -R }             ; }
 
         // Вычислить единичный вектор сонаправленый со вторым катетом
         // прямоугольного треугольника по гипотенузе и длине первого катета
@@ -922,11 +1080,11 @@ FRIEND  Circle tangent( C Circle& c1, C Circle& c2, double R )
         // касательная к окружностям self и c2
 CE      Line tangent( C Circle& c2 ) C
         {
-                ℂ₁ n̂ = cathet2( -(c2.o̅ - o̅), -(c2.R - R)); // почему минусы ???
+                ℂ₁ n̂ = cathet2( -(c2.o̅ - o̅), -(c2.R - R)); // TODO почему минусы ???
                 return Line( n̂, (n̂, o̅) - R );
         }
 
-        // точка касания касательной к окружности исходящей из точки p
+        // точка касания касательной исходящей из точки p к окружности
 CE      ℂ tangent_point( C ℂ& p̅ ) C
         {
                 return o̅ - R * cathet2( o̅ - p̅, R);
@@ -937,7 +1095,7 @@ CE      ℂ tangent_point( C ℂ& p̅ ) C
                 CE C int segs = 40;
 
                 //CE C ℂ₁ m̂¹⁰ = cis( 2π/segs);
-                CE C ℂ₁ m̂( 2π/segs/10 ); // типа 𝛼 ≈ sin 𝛼
+                CE C ℂ₁ m̂ = 2π/segs/10; // типа 𝛼 ≈ sin 𝛼
                 CE C ℂ₁ m̂⁵  = m̂*m̂*m̂*m̂*m̂;
                 CE C ℂ₁ m̂¹⁰ = m̂⁵*m̂⁵;
 
@@ -966,7 +1124,7 @@ CE      ℂ tangent_point( C ℂ& p̅ ) C
                 }
         };
 };
-void   Circle_test()
+CE void Circle_test()
 {
         CE Circle c_test( {0, 0}, 3 );
         CE ℂ o1( 5, 0);
@@ -986,7 +1144,7 @@ void   Circle_test()
 
         static_assert( c_test.tangent_point( ℂ( 5, 0)       ) ==~ ℂ(1.8, 2.4), "***");
 
-        static_assert( c_test.tangent( Circle( {   2, 0}, 1) ) ==  Line( ℂ₁::𝟏             ,  3), "***");
+        static_assert( c_test.tangent( Circle( {   2, 0}, 1) ) ==  Line( 𝟏                  ,  3), "***");
         static_assert( c_test.tangent( Circle( { 2⁰⁵, 0}, 2) ) ==~ Line( ℂ(  0.5⁰⁵,  0.5⁰⁵),  3), "***");
         static_assert( c_test.tangent( Circle( {   9, 0},-3) ) ==~ Line( ℂ(   2./3,  5⁰⁵/3),  3), "***");
 
@@ -1013,18 +1171,20 @@ CE      Arc( C Circle& c, C Arc& prev, C ℂ& next_point )
                 // ставим знак вектору n̂₂ таким, чтоб конечная точка дуги была максимально близко к next_point
                 //if( ((next_point - o̅), n̂₂) < 0)
                 //        n̂₂ = -n̂₂;
-                R.revsign( prev.R * R /*TODO R?*/ * (prev.n̂₂, n̂₁));
+
+                Double ǀRǀ = abs(R);
+                R = sgn( ǀRǀ, prev.R * (prev.n̂₂, n̂₁)); //R = sgn( R, prev.R * R * (prev.n̂₂, n̂₁));
         }
 
-CE      bool	OP ==( C Arc& a) C { return  Circle( self) ==  Circle( a) && n̂₁ ==  a.n̂₁ && n̂₂ ==  a.n̂₂; }
-CE	bool	near ( C Arc& a) C { return  Circle( self) ==~ Circle( a) && n̂₁ ==~ a.n̂₁ && n̂₂ ==~ a.n̂₂; } // почти равный
+CE      bool	OP ==( C Arc& a) C { return  Circle( self) ==  a && n̂₁ ==  a.n̂₁ && n̂₂ ==  a.n̂₂; }
+CE	bool	near ( C Arc& a) C { return  Circle( self) ==~ a && n̂₁ ==~ a.n̂₁ && n̂₂ ==~ a.n̂₂; } // почти равный
 
         void	print( ostream &os) C
         {
                 CE C int segs = 160;
 
                 //CE C ℂ₁ m̂¹⁰ = cis( 2π/segs);
-                CE C ℂ₁ m̂( 2π/segs/10 ); // типа 𝛼 ≈ sin 𝛼
+                CE C ℂ₁ m̂ = 2π/segs/10; // типа 𝛼 ≈ sin 𝛼
                 CE C ℂ₁ m̂⁵ = m̂*m̂*m̂*m̂*m̂;
 
                 ℂ₁ m̂¹⁰ = m̂⁵*m̂⁵;
@@ -1063,13 +1223,13 @@ int test1()
         CE double lr2 = lr2_abs / b_abs; // относительный радиус скругл. носка 2
 
         CE Circle  c_lead({0, ½s}, ½s );
-        CE Circle  с_top = tangent( c_lead, TE1, R );
-        CE Circle  c_bottom( с_top.o̅, R-s );
+        CE Circle  c_top = tangent( c_lead, TE1, R );
+        CE Circle  c_bottom( c_top.o̅, R-s );
         CE Segment s_end = tangent_segment( c_bottom, TE2 );
-        CE Circle  c_l1( Vertical( lr1) ^ Circle( с_top.o̅, c_bottom.R+lr1), lr1 );
-        CE Circle  c_l2 = tangent( с_top, c_l1, -lr2 );
+        CE Circle  c_l1( Vertical( lr1) ^ Circle( c_top.o̅, c_bottom.R+lr1), lr1 );
+        CE Circle  c_l2 = tangent( c_top, c_l1, -lr2 );
 
-        CE Arc a_top = chain_arc( TE1      , с_top , c_l2     );
+        CE Arc a_top = chain_arc( TE1      , c_top , c_l2     );
         CE Arc a_l2  = chain_arc( a_top.p̅2 , c_l2  , c_l1     );
         CE Arc a_l1  = chain_arc( a_l2.p̅2  , c_l1  , c_bottom, minus );
         CE Arc a_bottom( c_bottom, a_l1.p̅2, s_end.p̅1 );
@@ -1103,12 +1263,12 @@ int test2()
         CE double lr1 = lr1_abs / b_abs; // относительный радиус скругл. носка 1
 
         CE Circle  c_lead({lr1, lr1}, lr1 );
-        CE Circle  с_top = tangent( c_lead, TE1, R );
-        CE Circle  c_bottom( с_top.o̅, R-s );
+        CE Circle  c_top = tangent( c_lead, TE1, R );
+        CE Circle  c_bottom( c_top.o̅, R-s );
         CE Segment s_start = tangent_segment( c_lead, -c_bottom, minus );
         CE Segment s_end = tangent_segment( c_bottom, TE2 );
 
-        CE Arc a_top = chain_arc( TE1, с_top, c_lead      );
+        CE Arc a_top = chain_arc( TE1, c_top, c_lead      );
         CE Arc a_lead  ( c_lead  , a_top.p̅2  , s_start.p̅1 );
         CE Arc a_bottom( c_bottom, s_start.p̅2, s_end.p̅1   );
 
@@ -1137,11 +1297,11 @@ int test3()
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent( -c_l1, c_trail, R-s );
-        CE Circle  с_top( c_bottom.o̅, R );
-        CE Circle  c_l2  = tangent( c_l1, с_top, -lr2, minus );
+        CE Circle  c_top( c_bottom.o̅, R );
+        CE Circle  c_l2  = tangent( c_l1, c_top, -lr2, minus );
         CE Segment s_end = tangent_segment( c_l1, TE2, minus );
 
-        CE Arc a_top = chain_arc( TE1     , с_top, c_l2 );
+        CE Arc a_top = chain_arc( TE1     , c_top, c_l2 );
         CE Arc a_l2  = chain_arc( a_top.p̅2, c_l2 , c_l1 );
         CE Arc a_l1( c_l1, a_l2.p̅2, s_end.p̅1 );
 
@@ -1169,11 +1329,11 @@ int test4()
         CE Circle  c_l1   ( {lr1, lr1}, lr1 );
         CE Circle  c_trail( TE1       , -s  );
         CE Circle  c_bottom = tangent( -c_l1, c_trail, R-s );
-        CE Circle  с_top( c_bottom.o̅, R );
-        CE Circle  c_l2  = tangent( c_l1, с_top, -lr2, minus );
+        CE Circle  c_top( c_bottom.o̅, R );
+        CE Circle  c_l2  = tangent( c_l1, c_top, -lr2, minus );
         CE Segment s_end0 = tangent_segment( c_l1, TE2, minus );
 
-        CE Arc a_top = chain_arc( TE1     , с_top, c_l2 );
+        CE Arc a_top = chain_arc( TE1     , c_top, c_l2 );
         CE Arc a_l2  = chain_arc( a_top.p̅2, c_l2 , c_l1 );
         CE Arc a_l1( c_l1, a_l2.p̅2, s_end0.p̅1 );
 
@@ -1205,33 +1365,32 @@ int test5()
         CE Circle c_le     = { {ler, ler}, ler };
         CE Circle c_trail  = { TE1       , s   };
         CE Circle c_bottom = tangent( c_le, c_trail, R-s );
-        CE Circle с_top    = { c_bottom.o̅, R };
-        CE Circle c_lef    = tangent( с_top, c_le, -lef );
+        CE Circle c_top    = { c_bottom.o̅, R };
+        CE Circle c_lef    = tangent( c_top, c_le, -lef );
         CE ℂ     p_end    = c_bottom.tangent_point( TE2 );
 
-        CE Arc a_top   ( с_top   , TE1  , c_lef.o̅   );
+        CE Arc a_top   ( c_top   , TE1  , c_lef.o̅   );
         CE Arc a_lef   ( c_lef   , a_top, c_le.o̅    );
         CE Arc a_le    ( c_le    , a_lef, c_bottom.o̅);
         CE Arc a_bottom( c_bottom, a_le , p_end     );
         
         // static_asserts
         {
-                static_assert(    a_top == Arc{{{0.3656664547982899638, -1.468874254606819196 },  1.6  }, {ф, 0.3964584657510686894, 0.9180526591292618166}, {ф,-0.10593121205827985,    0.9943734601807630025}}, "***");
-                static_assert(    a_lef == Arc{{{0.2385490003283541327, -0.2756261023899033713},  0.4  }, {ф,-0.1059312120582799194, 0.9943734601807632245}, {ф,-0.563645946833390421,   0.8260164929456861316}}, "***");
-                static_assert(     a_le == Arc{{{0.03                 ,  0.03                 },  0.03 }, {ф,-0.5636459468333897549, 0.8260164929456866867}, {ф, 0.2185328481759700181, -0.9758295928429812083}}, "***");
-                static_assert( a_bottom == Arc{{{0.3656664547982899638, -1.468874254606819196 }, -1.506}, {ф,-0.2185328481759699903, 0.9758295928429810973}, {ф, 0.0631673008458991242,  0.9980029519514678205}}, "***");
+                static_assert(    a_top == Arc{{{0.3656664547982899638, -1.468874254606819196 },  1.6  }, ℂ₁{ф, 0.3964584657510686894, 0.9180526591292618166}, {ф,-0.10593121205827985,   0.9943734601807630025}}, "*");
+                static_assert(    a_lef == Arc{{{0.2385490003283541327, -0.2756261023899033713},  0.4  }, ℂ₁{ф,-0.1059312120582799194, 0.9943734601807632245}, {ф,-0.563645946833390421,  0.8260164929456861316}}, "*");
+                static_assert(     a_le == Arc{{{0.03                 ,  0.03                 },  0.03 }, ℂ₁{ф,-0.5636459468333897549, 0.8260164929456866867}, {ф, 0.2185328481759700181,-0.9758295928429812083}}, "*");
+                static_assert( a_bottom == Arc{{{0.3656664547982899638, -1.468874254606819196 }, -1.506}, ℂ₁{ф,-0.2185328481759699903, 0.9758295928429810973}, {ф, 0.0631673008458991242, 0.9980029519514678205}}, "*");
         }
         
         cout    << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
                 << std::setprecision(5) << std::fixed
                 << a_top << a_lef << a_le << a_bottom << p_end << TE2
                 ;
-
         return 0;
 }
 #endif
 
-int main( unsigned argc, C char *argv[])
+int main( unsigned argc, const char *argv[])
 {
         ++argv;
         --argc;
@@ -1240,7 +1399,7 @@ int main( unsigned argc, C char *argv[])
         return test5();
 #endif
 
-        static CE char *param_name[] =
+        static CE const char *param_name[] =
         { "диаметр трубы"
         , "толщина стенки трубы"
         , "хорда профиля"
@@ -1255,8 +1414,8 @@ int main( unsigned argc, C char *argv[])
         double &b_abs   = param[2];  // хорда профиля
         double &ler_abs = param[3];  // радиус передней кромки
         double &lef_abs = param[4];  // радиус скругл. передней кромки
-/*
- #i fn def NDEBUG
+
+#ifdef NONENONENONENONENONEDEF //#ifndef NDEBUG
         if( argc == 3 )
         {
                 std::size_t n = 0;
@@ -1270,8 +1429,8 @@ int main( unsigned argc, C char *argv[])
                 cerr << "Ошибка тестов!\n";
                 return 1;
         }
- #e nd if
-*/
+#endif
+
         if( argc < size( param_name) )
         {
                 setlocale( LC_ALL, "" );
@@ -1314,18 +1473,18 @@ int main( unsigned argc, C char *argv[])
         Circle c_le     = { {ler, ler}, ler };
         Circle c_trail  = { TE1       , s   };
         Circle c_bottom = tangent( c_le, c_trail, R-s );
-        Circle с_top    = { c_bottom.o̅, R   };
-        Circle c_lef    = tangent( с_top, c_le, -lef );
+        Circle c_top    = { c_bottom.o̅, R   };
+        Circle c_lef    = tangent( c_top, c_le, -lef );
         ℂ     p_end    = c_bottom.tangent_point( TE2 );
 
-        Arc a_top   ( с_top   , TE1  , c_lef.o̅   );
+        Arc a_top   ( c_top   , TE1  , c_lef.o̅   );
         Arc a_lef   ( c_lef   , a_top, c_le.o̅    );
         Arc a_le    ( c_le    , a_lef, c_bottom.o̅);
         Arc a_bottom( c_bottom, a_le , p_end     );
         
         cout    << "PIPE " << D_abs << 'x' << s_abs << '-' << b_abs << " r" << ler_abs << " f" << lef_abs << '\n'
                 << std::setprecision(5) << std::fixed
-                << a_top << a_lef << a_le << a_bottom << p_end << TE2;
-
+                << a_top << a_lef << a_le << a_bottom << p_end << TE2
+                ;
         return 0;
 }
