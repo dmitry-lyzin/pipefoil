@@ -117,121 +117,180 @@ ostream& operator <<( ostream& os, const X& x)
 
 namespace impl
 {
-        template<class T> struct longer           {                        };
-        template<       > struct longer< char    >{ using type = short;    };
-        template<       > struct longer<  uint8_t>{ using type = uint16_t; };
-        template<       > struct longer< uint16_t>{ using type = uint32_t; };
-        template<       > struct longer< uint32_t>{ using type = uint64_t; };
-        //template<       > struct longer< uint64_t>{ using type = uint128_t;};
-        template<       > struct longer<   int8_t>{ using type =  int16_t; };
-        template<       > struct longer<  int16_t>{ using type =  int32_t; };
-        template<       > struct longer<  int32_t>{ using type =  int64_t; };
-        //template<       > struct longer<  int64_t>{ using type =  int128_t;};
+        template<class T> struct Longer           {                        };
+        template<       > struct Longer< char    >{ using type = short;    };
+        template<       > struct Longer<  uint8_t>{ using type = uint16_t; };
+        template<       > struct Longer< uint16_t>{ using type = uint32_t; };
+        template<       > struct Longer< uint32_t>{ using type = uint64_t; };
+        //template<       > struct Longer< uint64_t>{ using type = uint128_t;};
+        template<       > struct Longer<   int8_t>{ using type =  int16_t; };
+        template<       > struct Longer<  int16_t>{ using type =  int32_t; };
+        template<       > struct Longer<  int32_t>{ using type =  int64_t; };
+        //template<       > struct Longer<  int64_t>{ using type =  int128_t;};
 
-        template<class T> struct shorter           {                        };
-        template<       > struct shorter< uint16_t>{ using type =  uint8_t; };
-        template<       > struct shorter< uint32_t>{ using type = uint16_t; };
-        template<       > struct shorter< uint64_t>{ using type = uint32_t; };
-        //template<       > struct shorter<uint128_t>{ using type = uint64_t; };
-        template<       > struct shorter<  int16_t>{ using type =   int8_t; };
-        template<       > struct shorter<  int32_t>{ using type =  int16_t; };
-        template<       > struct shorter<  int64_t>{ using type =  int32_t; };
-        //template<       > struct shorter< int128_t>{ using type =  int64_t; };
+        template<class T> struct Shorter           {                        };
+        template<       > struct Shorter< uint16_t>{ using type =  uint8_t; };
+        template<       > struct Shorter< uint32_t>{ using type = uint16_t; };
+        template<       > struct Shorter< uint64_t>{ using type = uint32_t; };
+        //template<       > struct Shorter<uint128_t>{ using type = uint64_t; };
+        template<       > struct Shorter<  int16_t>{ using type =   int8_t; };
+        template<       > struct Shorter<  int32_t>{ using type =  int16_t; };
+        template<       > struct Shorter<  int64_t>{ using type =  int32_t; };
+        //template<       > struct Shorter< int128_t>{ using type =  int64_t; };
 }
-template< typename T> using longer  = typename impl::longer < T>::type;
-template< typename T> using shorter = typename impl::shorter< T>::type;
-template< typename T> using sgned   = typename make_signed  < T>::type;
-template< typename T> using unsgned = typename make_unsigned< T>::type;
+template< typename T> using Longer  = typename impl::Longer < T>::type;
+template< typename T> using Shorter = typename impl::Shorter< T>::type;
+template< typename T> using Signed  = typename make_signed  < T>::type;
+template< typename T> using Unsgned = typename make_unsigned< T>::type;
 
-template< typename Self, typename Other = Self>
-struct Mul_div_assign_operators
+// пустой список
+struct Ø {} ø;
+
+namespace typelist_impl
 {
-        FRIEND  Self& OP *=( Self& l, C Other& r) { return l = l * r; }
-        FRIEND  Self& OP /=( Self& l, C Other& r) { return l = l / r; }
+        // предикат для построения списка (почти как в Prolog'е ;-)
+        template< class H, class T    > struct ·{};
+
+        template< class...            > struct List            {};
+        template<                     > struct List<         > { using type = Ø;                                };
+        template< class H, class... Ts> struct List< H, Ts...> { using type = ·< H, typename List< Ts...>::type>; };
+
+        template< class H             > struct Head            { using type = H; };
+        template< class H, class T    > struct Head< ·<H, T> > { using type = H; };
+
+        template< class H             > struct Tail            { using type = Ø; };
+        template< class H, class T    > struct Tail< ·<H, T> > { using type = T; };
+
+        // немного тестов
+        using Test_type_list = List< char, short, int, long>;
+        static_assert( is_same< typename Test_type_list::type, ·<char, ·<short, ·<int, ·<long, Ø>>>> >::value	, "*");
+}
+template< class    T > using Head = typename typelist_impl::Head< T    >::type; // "голова" (первый элемент) списка типов
+template< class    T > using Tail = typename typelist_impl::Tail< T    >::type; // "хвост" (все элементы кроме первого) списка типов
+template< class... Ts> using List = typename typelist_impl::List< Ts...>::type; // преобразовать набор аргументов в список типов
+
+template< typename T, typename Other = T>
+struct Mul_div_assign
+{
+        FRIEND  T&    OP *=( T& t, C Other& other) { return t = t * other; }
+        FRIEND  T&    OP /=( T& t, C Other& other) { return t = t / other; }
 };
 
-template< typename Self, typename Other = Self>
-struct Arith_assign_operators: Mul_div_assign_operators< Self, Other>
+template< typename T, typename Other = T>
+struct Arith_assign: Mul_div_assign< T, Other>
 {
-        FRIEND  Self& OP +=(  Self& l, C Other& r) { return l = l +   r ; }
-        FRIEND  Self& OP -=(  Self& l, C Other& r) { return l = l + (-r); }
-        FRIEND  auto  OP - ( CSelf& l, C Other& r) { return     l + (-r); }
-};
-
-template< typename Self, typename Other>
-struct Mul_div_operators: Mul_div_assign_operators< Self, Other>
-{
-        FRIEND  auto  OP * ( C Other& l, CSelf& r) { return r         * l; }
-        FRIEND  auto  OP / ( C Other& l, CSelf& r) { return r.recip() * l; }
+        FRIEND  T&   OP +=(  T& t, C Other& other) { return t = t +   other ; }
+        FRIEND  T&   OP -=(  T& t, C Other& other) { return t = t + (-other); }
+        FRIEND  auto OP - (C T& t, C Other& other) { return     t + (-other); }
 };
 
 // добавить операции сравнения с другим типом
-template< typename Self, typename Other = Self>
+template< typename T, typename Other = T>
 struct Comparable
 {
-        FRIEND  bool OP !=( CSelf& l, C Other& r) { return !(l == r); }
-        FRIEND	bool OP >=( CSelf& l, C Other& r) { return !(l <  r); }
-        FRIEND	bool OP <=( CSelf& l, C Other& r) { return !(l >  r); }
+        FRIEND  bool OP !=( C T& t, C Other& other) { return !(t == other); }
+        FRIEND	bool OP >=( C T& t, C Other& other) { return !(t <  other); }
+        FRIEND	bool OP <=( C T& t, C Other& other) { return !(t >  other); }
 
-        FRIEND  bool OP !=( C Other& l, CSelf& r) { return !(r == l); }
-        FRIEND	bool OP >=( C Other& l, CSelf& r) { return !(r >  l); }
-        FRIEND	bool OP <=( C Other& l, CSelf& r) { return !(r <  l); }
+        FRIEND  bool OP !=( C Other& other, C T& t) { return !(t == other); }
+        FRIEND	bool OP >=( C Other& other, C T& t) { return !(t >  other); }
+        FRIEND	bool OP <=( C Other& other, C T& t) { return !(t <  other); }
 
 #if __cplusplus < 202000
-        FRIEND  bool OP ==( C Other& l, CSelf& r) { return   r == l ; }
+        FRIEND  bool OP ==( C Other& other, C T& t) { return   t == other ; }
 #endif
-        FRIEND  bool OP < ( C Other& l, CSelf& r) { return   r >  l ; }
-        FRIEND  bool OP > ( C Other& l, CSelf& r) { return   r <  l ; }
+        FRIEND  bool OP < ( C Other& other, C T& t) { return   t >  other ; }
+        FRIEND  bool OP > ( C Other& other, C T& t) { return   t <  other ; }
 };
 
 // добавить операции сравнения с самим собой
-template< typename Self>
-struct Comparable< Self, Self>
+template< typename T>
+struct Comparable< T, T>
 {
-        FRIEND	bool OP !=( CSelf& l, CSelf& r) { return !(l == r); }
-        FRIEND	bool OP >=( CSelf& l, CSelf& r) { return !(l <  r); }
+        FRIEND	bool OP !=( C T& t1, C T& t2) { return !(t1 == t2); }
+        FRIEND	bool OP >=( C T& t1, C T& t2) { return !(t1 <  t2); }
 
-        FRIEND	bool OP <=( CSelf& l, CSelf& r) { return !(r <  l); }
-        FRIEND  bool OP > ( CSelf& l, CSelf& r) { return   r <  l ; }
+        FRIEND	bool OP <=( C T& t1, C T& t2) { return !(t2 <  t1); }
+        FRIEND  bool OP > ( C T& t1, C T& t2) { return   t2 <  t1 ; }
 };
 
-template< typename Self, typename Other>
-struct Arith_binary_operators   : Arith_assign_operators< Self, Other>
-                                , Comparable            < Self, Other>
+template< class T, class Others>
+struct Arith_binary_rec
+     : Arith_binary_rec< T, Tail< Others>>
+
+        , Arith_assign  < T, Head< Others>>
+        , Comparable    < T, Head< Others>>
 {
-        FRIEND  auto  OP + ( C Other& l, CSelf& r) { return   r  + l; }
-        FRIEND  auto  OP - ( C Other& l, CSelf& r) { return (-r) + l; }
-        FRIEND  auto  OP * ( C Other& l, CSelf& r) { return   r  * l; }
-        //FRIEND  auto  OP / ( C Other& l, CSelf& r) { return Self( l) / r;}
-        FRIEND  auto  OP / ( C Other& l, CSelf& r) { return (conj(r) * l) / abs²(r);}
+        using Other = Head< Others>;
+        FRIEND  auto OP + ( C Other& other, C T& t) { return   t  + other; }
+        FRIEND  auto OP - ( C Other& other, C T& t) { return (-t) + other; }
+        FRIEND  auto OP * ( C Other& other, C T& t) { return   t  * other; }
+        //FRIEND  auto OP / ( C Other& other, C T& t) { return T( other) / t;}
+        FRIEND  auto OP / ( C Other& other, C T& t) { return (conj(t) * other) / abs²(t);}
 };
 
+template< class T>
+struct Arith_binary_rec< T, Ø>
+        : Arith_assign  < T>
+        , Comparable    < T>
+{};
 
-template< typename Self>
+template< class... Ts>
+struct Arith_binary
+        : Arith_binary_rec      < Head< List< Ts...>>
+                                , Tail< List< Ts...>>
+                                >
+{};
+
+template< class T, class Others>
+struct Mul_div_binary_rec
+     : Mul_div_binary_rec< T, Tail< Others>>
+
+        , Mul_div_assign< T, Head< Others>>
+{
+        using Other = Head< Others>;
+        FRIEND  auto OP * ( C Other& other, C T& t) { return t         * other; }
+        FRIEND  auto OP / ( C Other& other, C T& t) { return t.recip() * other; }
+        //FRIEND  auto OP / ( C Other& other, C T& t) { return (t.conj() * other) / t.abs²(); }
+};
+
+template< class T>
+struct Mul_div_binary_rec< T, Ø>
+        : Mul_div_assign  < T>
+{};
+
+template< class... Ts>
+struct Mul_div_binary
+        : Mul_div_binary_rec    < Head< List< Ts...>>
+                                , Tail< List< Ts...>>
+                                >
+{};
+
+template< typename T>
 struct Arith_function
 {
-        FRIEND  auto    abs  ( CSelf& x) { return x.abs  (); }
-        FRIEND  auto    abs² ( CSelf& x) { return x.abs² (); }
-        FRIEND  auto    recip( CSelf& x) { return x.recip(); }
-        FRIEND  auto    ⅟   ( CSelf& x) { return x.recip(); }
-        FRIEND  auto    ²    ( CSelf& x) { return x.²    (); }
+        FRIEND  auto    abs  ( C T& t) { return t.abs  (); }
+        FRIEND  auto    abs² ( C T& t) { return t.abs² (); }
+        FRIEND  auto    recip( C T& t) { return t.recip(); }
+        FRIEND  auto    ⅟   ( C T& t) { return t.recip(); }
+        FRIEND  auto    ²    ( C T& t) { return t.²    (); }
 };
 
-template< typename Self>
-class Near: Comparable< Near<Self>, Self>
+template< typename T>
+class Near: Comparable< Near<T>, T>
 {
-        CSelf&	ref;	// ссылка на "родителя"
+        C T&	ref;	// ссылка на "родителя"
 public:
-        EXPL	Near		( CSelf& r): ref( r) {}
-        CEC	bool	OP ==	( CSelf& r) C { return  ref.near	( r); }
-        CEC	bool	OP <	( CSelf& r) C { return !ref.near_greater( r); }
-        CEC	bool	OP >	( CSelf& r) C { return !ref.near_less	( r); }
+        EXPL	Near		( C T& t): ref( t) {}
+        CEC	bool	OP ==	( C T& t) C { return   ref.near		( t); }
+        CEC	bool	OP <	( C T& t) C { return ! ref.near_greater	( t); }
+        CEC	bool	OP >	( C T& t) C { return ! ref.near_less	( t); }
 };
 
-template< typename Self>
+template< typename T>
 struct Near_comparable
 {
-        FRIEND	Near< Self> OP ~ ( CSelf& x) { return Near< Self>(x); }
+        FRIEND	Near< T> OP ~ ( C T& t) { return Near< T>(t); }
 };
 
 #pragma endregion
@@ -241,10 +300,10 @@ template< typename T>
 CE auto sign_cast( T x) -> typename
 enable_if
 <       is_integral< T>::value && is_unsigned< T>::value
-,       sgned< T>
+,       Signed< T>
 >::type
 {
-        using Signed_T = sgned< T>;
+        using Signed_T = Signed< T>;
         CE Signed_T min = numeric_limits< Signed_T>::min();
         // этот if нужен для осчастливливания constexpr'а,
         // надеюсь, оптимизатор его выкинет
@@ -262,7 +321,7 @@ enable_if
 ,       T
 >::type
 {
-        using uT = unsgned< T>;
+        using uT = Unsgned< T>;
         // x ⩾ 0 → mask = 0
         // x < 0 → mask = -1
         const uT mask = x >> lastbit< T>;
@@ -461,13 +520,13 @@ struct Angle    : Comparable	 < Angle>
 private:
         Val     val;
 STATIC  Val     semiturn = Val(1) << lastbit< Val>;
-STATIC  sgned< Val> ε = 8;
+STATIC  Signed< Val> ε = 8;
 
 TINT    Self         ( INT        v ): val( v) {}
 
 public:
 EXPL    Self         ( C Turn&      );
-EXPL    Self         ( double radian): val( Val(-1) & sgned< longer< Val>>( radian * (semiturn/π)) ) {}
+EXPL    Self         ( double radian): val( Val(-1) & Signed< Longer< Val>>( radian * (semiturn/π)) ) {}
 EXPL OP C double     (              ) C { return val * (π/semiturn)		; }
 CEC     bool    OP ==( CSelf&     r ) C { return val == r.val			; }
 CEC     bool    OP < ( CSelf&     r ) C { return val <  r.val			; }
@@ -480,7 +539,7 @@ CEC     Val*    OP & (              ) C { return &val				; }
 CEC     Self    OP + ( CSelf&     r ) C { return val + r.val                    ; }
 CEC     Self    OP - ( CSelf&     r ) C { return val - r.val                    ; }
 CEC     Self    OP * ( double     r ) C { return Val( val * r )                 ; }
-CEC     Self    OP / ( double     r ) C { return sgned< Val>( val / r )         ; }
+CEC     Self    OP / ( double     r ) C { return Signed< Val>( val / r )        ; }
 TINT C  Self    OP * ( INT        r ) C { return val * r                        ; }
 TINT C  Self    OP / ( INT        r ) C { return sign_cast( val) / r            ; }
 CEC     Self    OP / ( unsigned   r ) C { return            val  / r            ; }
@@ -501,7 +560,7 @@ CEC Angle OP ""ᵒ ( unsigned long long gradus)
 CEC Angle OP ""ᵒ (        long double gradus)
 {
         using Val = Angle::Val;
-        return Val( Val(-1) & longer< Val>( static_cast< long double>(Angle::semiturn) * gradus / 180) );
+        return Val( Val(-1) & Longer< Val>( static_cast< long double>(Angle::semiturn) * gradus / 180) );
 };
 
 CE void test_Angle()
@@ -557,10 +616,10 @@ struct Turn
         #define Self Turn
         friend struct Angle; 
 
-        using Val  = sgned< longer< Angle::Val>>;
+        using Val  = Signed< Longer< Angle::Val>>;
 
 private:
-STATIC  Val     one_turn = Val(1) << (lastbit< unsgned< Angle::Val>> + 1);
+STATIC  Val     one_turn = Val(1) << (lastbit< Unsgned< Angle::Val>> + 1);
         Val     val;
 CE      Self            ( Ф, Val v): val( v           ) {}
 public:
@@ -574,7 +633,7 @@ CEC     Self    OP -    (         ) C { return { ф,-val         }; }
 CEC     Self    OP +    ( CSelf& r) C { return { ф, val + r.val }; }
 CEC     Self    OP -    ( CSelf& r) C { return { ф, val - r.val }; }
 CEC     Self    OP *    ( double r) C { return { ф, Val( val*r) }; }
-CEC     Self    OP /    ( double r) C { return sgned< Val>( double(val) / r ); }
+CEC     Self    OP /    ( double r) C { return Signed< Val>( double(val) / r ); }
 TINT C  Self    OP *    ( INT    r) C { return { ф, val * r     }; }
 TINT C  Self    OP /    ( INT    r) C { return { ф, val / r     }; }
 CEC     Val     OP /    ( CSelf& r) C { return      val / r.val  ; }
@@ -630,18 +689,12 @@ struct Complex_function
 };
 
 // Комплексное Число
-struct Co       :
+struct Co:
 #define Self Co
-          Arith_function	< Self		>
-        , Complex_function	< Self		>
-        , Comparable		< Self		>
-        , Near_comparable	< Self		>
-        , Arith_assign_operators< Self		>
-        , Arith_binary_operators< Self, double	>
-        , Arith_binary_operators< Self,  𝐢_t	>
-        , Arith_binary_operators< Self, ˗𝐢_t	>
-        , Arith_binary_operators< Self,  𝟏_t	>
-        , Arith_binary_operators< Self, ˗𝟏_t	>
+          Arith_function	< Self	>
+        , Complex_function	< Self	>
+        , Near_comparable	< Self	>
+        , Arith_binary		< Self, double, 𝐢_t, ˗𝐢_t, 𝟏_t, ˗𝟏_t>
 {
 protected:
         Double  r, i;
@@ -758,15 +811,9 @@ CE void test_Co()
 // Единичное Комплексное Число (Unit Complex Number). C͡o = {𝑧 ∈ ℂ: |𝑧| = 1}
 struct C͡o: Co
 #define Self C͡o
-        , Arith_function	< Self		>
-        , Complex_function	< Self		>
-        , Mul_div_assign_operators< Self	>
-        , Mul_div_operators	< Self,  𝟏_t	>
-        , Mul_div_operators	< Self, ˗𝟏_t	>
-        , Mul_div_operators	< Self,  𝐢_t	>
-        , Mul_div_operators	< Self, ˗𝐢_t	>
-        , Mul_div_operators	< Self, Co	>
-        , Mul_div_operators	< Self, double	>
+        , Arith_function	< Self	>
+        , Complex_function	< Self	>
+        , Mul_div_binary	< Self, Co, double, 𝟏_t, ˗𝟏_t, 𝐢_t, ˗𝐢_t>
 {
 protected:
 CE      Self( double r, double i): Co( r, i) {}
@@ -791,6 +838,11 @@ CEC     bool    OP < ( CSelf& z) C { return ψarg() < z.ψarg()   ; }
 CEC     Self    OP * ( CSelf& z) C { return {ф, Co::OP *(z) }   ; } // ЕКЧ*ЕКЧ = ЕКЧ
 CEC     Self    OP / ( CSelf& z) C { return self * z.conj()     ; } // ЕКЧ/ЕКЧ = ЕКЧ, при этом деление вырождено
 
+CEC     Co      OP * ( C Co&  z) C { return Co::OP *(z); } // ЕКЧ*КЧ = КЧ
+CEC     Co      OP / ( C Co&  z) C { return Co::OP /(z); } // ЕКЧ/КЧ = КЧ
+CEC     Co      OP * ( double x) C { return Co::OP *(x); } // ЕКЧ* Ч = КЧ
+CEC     Co      OP / ( double x) C { return Co::OP /(x); } // ЕКЧ/ Ч = КЧ
+
 CEC     Self    OP * ( C  𝟏_t& ) C { return  self; }
 CEC     Self    OP / ( C  𝟏_t& ) C { return  self; }
 CEC     Self    OP * ( C ˗𝟏_t& ) C { return -self; }
@@ -800,11 +852,6 @@ CEC     Self    OP * ( C  𝐢_t& ) C { return {-i, r}; }
 CEC     Self    OP / ( C  𝐢_t& ) C { return { i,-r}; }
 CEC     Self    OP * ( C ˗𝐢_t& ) C { return { i,-r}; }
 CEC     Self    OP / ( C ˗𝐢_t& ) C { return {-i, r}; }
-
-CEC     Co      OP * ( C Co&  z) C { return Co::OP *(z); } // ЕКЧ*КЧ = КЧ
-CEC     Co      OP / ( C Co&  z) C { return Co::OP /(z); } // ЕКЧ/КЧ = КЧ
-CEC     Co      OP * ( double x) C { return Co::OP *(x); } // ЕКЧ* Ч = КЧ
-CEC     Co      OP / ( double x) C { return Co::OP /(x); } // ЕКЧ/ Ч = КЧ
 #undef Self
 };
 
@@ -1390,7 +1437,7 @@ int test5()
 }
 #endif
 
-int main( unsigned argc, const char *argv[])
+int main( int argc, const char *argv[])
 {
         ++argv;
         --argc;
@@ -1431,7 +1478,7 @@ int main( unsigned argc, const char *argv[])
         }
 #endif
 
-        if( argc < size( param_name) )
+        if( (unsigned)argc < size( param_name) )
         {
                 setlocale( LC_ALL, "" );
 
