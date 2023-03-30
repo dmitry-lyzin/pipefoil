@@ -138,36 +138,42 @@ namespace impl
         template<       > struct Shorter<  int64_t>{ using type =  int32_t; };
         //template<       > struct Shorter< int128_t>{ using type =  int64_t; };
 }
-template< typename T> using Longer  = typename impl::Longer < T>::type;
-template< typename T> using Shorter = typename impl::Shorter< T>::type;
-template< typename T> using Signed  = typename make_signed  < T>::type;
-template< typename T> using Unsgned = typename make_unsigned< T>::type;
+template< class T> using Longer  = typename impl::Longer < T>::type;
+template< class T> using Shorter = typename impl::Shorter< T>::type;
+template< class T> using Signed  = typename make_signed  < T>::type;
+template< class T> using Unsgned = typename make_unsigned< T>::type;
 
-// пустой список
-struct Ø {} ø;
-
-namespace typelist_impl
+template< class... > struct Types {};
+namespace impl
 {
-        // предикат для построения списка (почти как в Prolog'е ;-)
-        template< class H, class T    > struct ·{};
+        template< class> struct Head;
+        template< class> struct Tail;
 
-        template< class...            > struct List            {};
-        template<                     > struct List<         > { using type = Ø;                                };
-        template< class H, class... Ts> struct List< H, Ts...> { using type = ·< H, typename List< Ts...>::type>; };
+        template< class H, class... Ts> struct Head< Types< H, Ts...>> { using type = H;             };
+        template< class H, class... Ts> struct Tail< Types< H, Ts...>> { using type = Types< Ts...>; };
 
-        template< class H             > struct Head            { using type = H; };
-        template< class H, class T    > struct Head< ·<H, T> > { using type = H; };
+        //https://www.programmersought.com/article/2687909988/
+        //template< class T> using Head_t = typename Head<T>::type;
+        //template< class T> using Tail_t = typename Tail<T>::type;
+        //template< unsigned N, class List> struct Type_at          : Type_at< N-1, Tail_t< List>> {}; // recursive case
+        //template<             class List> struct Type_at< 0, List>: Head< List>                  {}; // basis case
 
-        template< class H             > struct Tail            { using type = Ø; };
-        template< class H, class T    > struct Tail< ·<H, T> > { using type = T; };
-
-        // немного тестов
-        using Test_type_list = List< char, short, int, long>;
-        static_assert( is_same< typename Test_type_list::type, ·<char, ·<short, ·<int, ·<long, Ø>>>> >::value	, "*");
+        template< unsigned N, class Types         > struct Type_at;
+        template< unsigned N, class H, class... Ts> struct Type_at< N, Types< H, Ts...>>: Type_at< N-1, Types< Ts...>> {}; // recursive case
+        template<             class H, class... Ts> struct Type_at< 0, Types< H, Ts...>>  { using type = H;             }; // basis case
 }
-template< class    T > using Head = typename typelist_impl::Head< T    >::type; // "голова" (первый элемент) списка типов
-template< class    T > using Tail = typename typelist_impl::Tail< T    >::type; // "хвост" (все элементы кроме первого) списка типов
-template< class... Ts> using List = typename typelist_impl::List< Ts...>::type; // преобразовать набор аргументов в список типов
+template<             class Types> using Head    = typename impl::   Head<    Types>::type; // "голова" (первый элемент) списка типов
+template<             class Types> using Tail    = typename impl::   Tail<    Types>::type; // "хвост" (все элементы кроме первого) списка типов
+template< unsigned N, class Types> using Type_at = typename impl::Type_at< N, Types>::type;
+
+// немного тестов
+using Test_list = Types< char, short, int, long>;
+
+static_assert( is_same< Head< Test_list>	, char				>::value, "*");
+static_assert( is_same< Tail< Test_list>	, Types< short, int, long>	>::value, "*");
+static_assert( is_same< Head< Types< char>>	, char				>::value, "*");
+static_assert( is_same< Tail< Types< char>>	, Types<>			>::value, "*");
+static_assert( is_same< Type_at< 2, Test_list>	, int				>::value, "*");
 
 template< typename T, typename Other = T>
 struct Mul_div_assign
@@ -230,16 +236,14 @@ struct Arith_binary_rec
 };
 
 template< class T>
-struct Arith_binary_rec< T, Ø>
+struct Arith_binary_rec< T, Types<>>
         : Arith_assign  < T>
         , Comparable    < T>
 {};
 
-template< class... Ts>
+template< class T, class... Ts>
 struct Arith_binary
-        : Arith_binary_rec      < Head< List< Ts...>>
-                                , Tail< List< Ts...>>
-                                >
+        : Arith_binary_rec< T, Types< Ts...>>
 {};
 
 template< class T, class Others>
@@ -255,15 +259,13 @@ struct Mul_div_binary_rec
 };
 
 template< class T>
-struct Mul_div_binary_rec< T, Ø>
-        : Mul_div_assign  < T>
+struct Mul_div_binary_rec< T, Types<>>
+        : Mul_div_assign< T>
 {};
 
-template< class... Ts>
+template< class T, class... Ts>
 struct Mul_div_binary
-        : Mul_div_binary_rec    < Head< List< Ts...>>
-                                , Tail< List< Ts...>>
-                                >
+        : Mul_div_binary_rec< T, Types< Ts...>>
 {};
 
 template< typename T>
