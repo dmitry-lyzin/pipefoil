@@ -143,37 +143,7 @@ template< class T> using Shorter = typename impl::Shorter< T>::type;
 template< class T> using Signed  = typename make_signed  < T>::type;
 template< class T> using Unsgned = typename make_unsigned< T>::type;
 
-template< class... > struct Types {};
-namespace impl
-{
-        template< class> struct Head;
-        template< class> struct Tail;
-
-        template< class H, class... Ts> struct Head< Types< H, Ts...>> { using type = H;             };
-        template< class H, class... Ts> struct Tail< Types< H, Ts...>> { using type = Types< Ts...>; };
-
-        //https://www.programmersought.com/article/2687909988/
-        //template< class T> using Head_t = typename Head<T>::type;
-        //template< class T> using Tail_t = typename Tail<T>::type;
-        //template< unsigned N, class List> struct Type_at          : Type_at< N-1, Tail_t< List>> {}; // recursive case
-        //template<             class List> struct Type_at< 0, List>: Head< List>                  {}; // basis case
-
-        template< unsigned N, class Types         > struct Type_at;
-        template< unsigned N, class H, class... Ts> struct Type_at< N, Types< H, Ts...>>: Type_at< N-1, Types< Ts...>> {}; // recursive case
-        template<             class H, class... Ts> struct Type_at< 0, Types< H, Ts...>>  { using type = H;             }; // basis case
-}
-template<             class Types> using Head    = typename impl::   Head<    Types>::type; // "голова" (первый элемент) списка типов
-template<             class Types> using Tail    = typename impl::   Tail<    Types>::type; // "хвост" (все элементы кроме первого) списка типов
-template< unsigned N, class Types> using Type_at = typename impl::Type_at< N, Types>::type;
-
-// немного тестов
-using Test_list = Types< char, short, int, long>;
-
-static_assert( is_same< Head< Test_list>	, char				>::value, "*");
-static_assert( is_same< Tail< Test_list>	, Types< short, int, long>	>::value, "*");
-static_assert( is_same< Head< Types< char>>	, char				>::value, "*");
-static_assert( is_same< Tail< Types< char>>	, Types<>			>::value, "*");
-static_assert( is_same< Type_at< 2, Test_list>	, int				>::value, "*");
+template< class... > struct Types {}; // список типов
 
 template< typename T, typename Other = T>
 struct Mul_div_assign
@@ -220,14 +190,17 @@ struct Comparable< T, T>
         FRIEND  bool OP > ( C T& t1, C T& t2) { return   t2 <  t1 ; }
 };
 
-template< class T, class Others>
-struct Arith_binary_rec
-     : Arith_binary_rec< T, Tail< Others>>
 
-        , Arith_assign  < T, Head< Others>>
-        , Comparable    < T, Head< Others>>
+template< class T, class Types>
+struct Arith_binary_rec;
+
+template< class T, class Other, class... Others>
+struct Arith_binary_rec< T, Types< Other, Others...>>
+     : Arith_binary_rec< T, Types<        Others...>>
+
+        , Arith_assign  < T, Other>
+        , Comparable    < T, Other>
 {
-        using Other = Head< Others>;
         FRIEND  auto OP + ( C Other& other, C T& t) { return   t  + other; }
         FRIEND  auto OP - ( C Other& other, C T& t) { return (-t) + other; }
         FRIEND  auto OP * ( C Other& other, C T& t) { return   t  * other; }
@@ -246,13 +219,15 @@ struct Arith_binary
         : Arith_binary_rec< T, Types< Ts...>>
 {};
 
-template< class T, class Others>
-struct Mul_div_binary_rec
-     : Mul_div_binary_rec< T, Tail< Others>>
+template< class T, class Types>
+struct Mul_div_binary_rec;
 
-        , Mul_div_assign< T, Head< Others>>
+template< class T, class Other, class... Others>
+struct Mul_div_binary_rec< T, Types< Other, Others...>>
+     : Mul_div_binary_rec< T, Types<        Others...>>
+
+        , Mul_div_assign< T, Other>
 {
-        using Other = Head< Others>;
         FRIEND  auto OP * ( C Other& other, C T& t) { return t         * other; }
         FRIEND  auto OP / ( C Other& other, C T& t) { return t.recip() * other; }
         //FRIEND  auto OP / ( C Other& other, C T& t) { return (t.conj() * other) / t.abs²(); }
