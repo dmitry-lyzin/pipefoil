@@ -138,10 +138,10 @@ namespace impl
         template<       > struct Shorter<  int64_t>{ using type =  int32_t; };
         //template<       > struct Shorter< int128_t>{ using type =  int64_t; };
 }
-template< class T> using Longer  = typename impl::Longer < T>::type;
-template< class T> using Shorter = typename impl::Shorter< T>::type;
-template< class T> using Signed  = typename make_signed  < T>::type;
-template< class T> using Unsgned = typename make_unsigned< T>::type;
+template< class T> using Longer   = typename impl::Longer < T>::type;
+template< class T> using Shorter  = typename impl::Shorter< T>::type;
+template< class T> using Signed   = typename make_signed  < T>::type;
+template< class T> using Unsigned = typename make_unsigned< T>::type;
 
 template< class... > struct Types {}; // список типов
 
@@ -192,11 +192,11 @@ struct Comparable< T, T>
 
 
 template< class T, class Types>
-struct Arith_binary_rec;
+struct Arith_binary;
 
 template< class T, class Other, class... Others>
-struct Arith_binary_rec< T, Types< Other, Others...>>
-     : Arith_binary_rec< T, Types<        Others...>>
+struct Arith_binary< T, Types< Other, Others...>>
+     : Arith_binary< T, Types<        Others...>>
 
         , Arith_assign  < T, Other>
         , Comparable    < T, Other>
@@ -209,22 +209,17 @@ struct Arith_binary_rec< T, Types< Other, Others...>>
 };
 
 template< class T>
-struct Arith_binary_rec< T, Types<>>
+struct Arith_binary< T, Types<>>
         : Arith_assign  < T>
         , Comparable    < T>
 {};
 
-template< class T, class... Ts>
-struct Arith_binary
-        : Arith_binary_rec< T, Types< Ts...>>
-{};
-
 template< class T, class Types>
-struct Mul_div_binary_rec;
+struct Mul_div_binary;
 
 template< class T, class Other, class... Others>
-struct Mul_div_binary_rec< T, Types< Other, Others...>>
-     : Mul_div_binary_rec< T, Types<        Others...>>
+struct Mul_div_binary< T, Types< Other, Others...>>
+     : Mul_div_binary< T, Types<        Others...>>
 
         , Mul_div_assign< T, Other>
 {
@@ -234,13 +229,8 @@ struct Mul_div_binary_rec< T, Types< Other, Others...>>
 };
 
 template< class T>
-struct Mul_div_binary_rec< T, Types<>>
+struct Mul_div_binary< T, Types<>>
         : Mul_div_assign< T>
-{};
-
-template< class T, class... Ts>
-struct Mul_div_binary
-        : Mul_div_binary_rec< T, Types< Ts...>>
 {};
 
 template< typename T>
@@ -298,7 +288,7 @@ enable_if
 ,       T
 >::type
 {
-        using uT = Unsgned< T>;
+        using uT = Unsigned< T>;
         // x ⩾ 0 → mask = 0
         // x < 0 → mask = -1
         const uT mask = x >> lastbit< T>;
@@ -520,7 +510,7 @@ CEC     Self    OP / ( double     r ) C { return Signed< Val>( val / r )        
 TINT C  Self    OP * ( INT        r ) C { return val * r                        ; }
 TINT C  Self    OP / ( INT        r ) C { return sign_cast( val) / r            ; }
 CEC     Self    OP / ( unsigned   r ) C { return            val  / r            ; }
-CEC     Val     OP / ( CSelf&     r ) C { return val / r.val                    ; }
+CEC     auto    OP / ( CSelf&     r ) C { return val / r.val                    ; }
         void    print( ostream&   os) C { os << ( val * (180./semiturn)) << '°' ; }
 
 FRIEND  Self    OP ""ᵒ( unsigned long long gradus);
@@ -544,44 +534,68 @@ CE void test_Angle()
 {
         #pragma warning( push)
         #pragma warning( disable: 4146)
-        static_assert( Angle(-π   ) ==  180ᵒ, "***" );
-        static_assert( Angle(-π/ 2) ==  270ᵒ, "***" );
-        static_assert( Angle(5π   ) ==  180ᵒ, "***" );
-        static_assert( Angle(5π/ 2) ==   90ᵒ, "***" );
-        static_assert( Angle(3π/ 2) ==  270ᵒ, "***" );
-        static_assert( Angle(3π/ 2) ==  -90ᵒ, "***" );
-        static_assert( Angle( π   ) ==  180ᵒ, "***" );
-        static_assert( Angle( π/ 2) ==   90ᵒ, "***" );
-        static_assert( Angle( π/ 3) ==   60ᵒ, "***" );
-        static_assert( Angle( π/ 4) ==   45ᵒ, "***" );
-        static_assert( Angle( π/ 5) ==   36ᵒ, "***" );
-        static_assert( Angle( π/ 6) ==   30ᵒ, "***" );
-        static_assert( Angle( π/ 8) == 22.5ᵒ, "***" );
-        static_assert( Angle( π/ 9) ==   20ᵒ, "***" );
-        static_assert( Angle( π/10) ==   18ᵒ, "***" );
-        static_assert( Angle( π/12) ==   15ᵒ, "***" );
-        static_assert( Angle( π/15) ==   12ᵒ, "***" );
-        static_assert( Angle( π/16) ==11.25ᵒ, "***" );
-        static_assert( Angle( π/18) ==   10ᵒ, "***" );
-        static_assert( Angle( π/20) ==    9ᵒ, "***" );
-        static_assert( Angle( π/24) ==  7.5ᵒ, "***" );
-        static_assert( Angle( π/25) ==  7.2ᵒ, "***" );
-        static_assert( Angle(π/180) ==    1ᵒ, "***" );
-        static_assert(        -180ᵒ ==  180ᵒ, "***" );
-        static_assert(    1ᵒ - 359ᵒ ==    2ᵒ, "***" );
-        static_assert(  1.5ᵒ + 2.5ᵒ ==    4ᵒ, "***" );
-        static_assert(  1.5ᵒ *  10  ==   15ᵒ, "***" );
-        static_assert(          15ᵒ == 1.5ᵒ * 10, "***" );
-        static_assert(  -10ᵒ *  -3  ==   30ᵒ, "***" );
-        static_assert(   30ᵒ /  -3  ==  -10ᵒ, "***" );
-        static_assert(   30ᵒ /  -3. ==  -10ᵒ, "***" );
-        static_assert(  -90ᵒ *  -3  ==  270ᵒ, "***" );
-        static_assert(    1ᵒ *  10  ==~  10ᵒ, "***" );
-        static_assert(   36ᵒ *  10  ==~   0ᵒ, "***" );
-        static_assert(  359ᵒ *  10  ==~ -10ᵒ, "***" );
-        static_assert(   90ᵒ /  10ᵒ ==    9 , "***" );
-        static_assert(  -90ᵒ /  10ᵒ ==   27 , "***" );
-        //static_assert( -90ᵒ  / -10ᵒ ==    9 , "***" );
+        AUTO a1 = 1.5ᵒ;
+        AUTO a2 = 2.5ᵒ;
+
+        //AUTO a3 = a1 + 1.;
+        //AUTO a3 = a1 * a2;
+
+        static_assert( is_same< decltype( a1 + a2 ), C Angle	>::value, "*");
+        static_assert( is_same< decltype( a1 - a2 ), C Angle	>::value, "*");
+        //static_assert( is_same< decltype( 1  * a1 ), C Angle	>::value, "*");
+        //static_assert( is_same< decltype( 1. * a1 ), C Angle	>::value, "*");
+        static_assert( is_same< decltype( a1 / 1  ), C Angle	>::value, "*");
+        static_assert( is_same< decltype( a1 / 1. ), C Angle	>::value, "*");
+        static_assert( is_same< decltype( a1 / a2 ), Angle::Val	>::value, "*");
+
+        static_assert( !(a1 >  a2)	, "*");
+        static_assert( !(a1 == a2)	, "*");
+        static_assert(   a1 <= a2	, "*");
+
+        // проверка округлений в к-торе 
+        {
+                static_assert( Angle(-π   ) ==  180ᵒ, "*" );
+                static_assert( Angle(-π/ 2) ==  270ᵒ, "*" );
+                static_assert( Angle(5π   ) ==  180ᵒ, "*" );
+                static_assert( Angle(5π/ 2) ==   90ᵒ, "*" );
+                static_assert( Angle(3π/ 2) ==  270ᵒ, "*" );
+                static_assert( Angle(3π/ 2) ==  -90ᵒ, "*" );
+                static_assert( Angle( π   ) ==  180ᵒ, "*" );
+                static_assert( Angle( π/ 2) ==   90ᵒ, "*" );
+                static_assert( Angle( π/ 3) ==   60ᵒ, "*" );
+                static_assert( Angle( π/ 4) ==   45ᵒ, "*" );
+                static_assert( Angle( π/ 5) ==   36ᵒ, "*" );
+                static_assert( Angle( π/ 6) ==   30ᵒ, "*" );
+                static_assert( Angle( π/ 8) == 22.5ᵒ, "*" );
+                static_assert( Angle( π/ 9) ==   20ᵒ, "*" );
+                static_assert( Angle( π/10) ==   18ᵒ, "*" );
+                static_assert( Angle( π/12) ==   15ᵒ, "*" );
+                static_assert( Angle( π/15) ==   12ᵒ, "*" );
+                static_assert( Angle( π/16) ==11.25ᵒ, "*" );
+                static_assert( Angle( π/18) ==   10ᵒ, "*" );
+                static_assert( Angle( π/20) ==    9ᵒ, "*" );
+                static_assert( Angle( π/24) ==  7.5ᵒ, "*" );
+                static_assert( Angle( π/25) ==  7.2ᵒ, "*" );
+                static_assert( Angle(π/180) ==    1ᵒ, "*" );
+        }
+        // проверка округлений при * и / 
+        {
+                static_assert(        -180ᵒ ==  180ᵒ,"*" );
+                static_assert(    1ᵒ - 359ᵒ ==    2ᵒ,"*" );
+                static_assert(  1.5ᵒ + 2.5ᵒ ==    4ᵒ,"*" );
+                static_assert(  1.5ᵒ *  10  ==   15ᵒ,"*" );
+                static_assert(  15ᵒ    == 1.5ᵒ * 10 ,"*" );
+                static_assert(  -10ᵒ *  -3  ==   30ᵒ,"*" );
+                static_assert(   30ᵒ /  -3  ==  -10ᵒ,"*" );
+                static_assert(   30ᵒ /  -3. ==  -10ᵒ,"*" );
+                static_assert(  -90ᵒ *  -3  ==  270ᵒ,"*" );
+                static_assert(    1ᵒ *  10  ==~  10ᵒ,"*" );
+                static_assert(   36ᵒ *  10  ==~   0ᵒ,"*" );
+                static_assert(  359ᵒ *  10  ==~ -10ᵒ,"*" );
+                static_assert(   90ᵒ /  10ᵒ ==    9 ,"*" );
+                static_assert(  -90ᵒ /  10ᵒ ==   27 ,"*" );
+                //static_assert( -90ᵒ  / -10ᵒ ==    9 ,"*" );
+        }
         #pragma warning( pop)
 }
 #pragma endregion
@@ -596,7 +610,7 @@ struct Turn
         using Val  = Signed< Longer< Angle::Val>>;
 
 private:
-STATIC  Val     one_turn = Val(1) << (lastbit< Unsgned< Angle::Val>> + 1);
+STATIC  Val     one_turn = Val(1) << (lastbit< Unsigned< Angle::Val>> + 1);
         Val     val;
 CE      Self            ( Ф, Val v): val( v           ) {}
 public:
@@ -613,7 +627,7 @@ CEC     Self    OP *    ( double r) C { return { ф, Val( val*r) }; }
 CEC     Self    OP /    ( double r) C { return Signed< Val>( double(val) / r ); }
 TINT C  Self    OP *    ( INT    r) C { return { ф, val * r     }; }
 TINT C  Self    OP /    ( INT    r) C { return { ф, val / r     }; }
-CEC     Val     OP /    ( CSelf& r) C { return      val / r.val  ; }
+CEC     auto    OP /    ( CSelf& r) C { return      val / r.val  ; }
         void    print   ( ostream& os) C
         {
                 os << double( val) << " turn";
@@ -671,7 +685,7 @@ struct Co:
           Arith_function	< Self	>
         , Complex_function	< Self	>
         , Near_comparable	< Self	>
-        , Arith_binary		< Self, double, 𝐢_t, ˗𝐢_t, 𝟏_t, ˗𝟏_t>
+        , Arith_binary		< Self, Types< double, 𝐢_t, ˗𝐢_t, 𝟏_t, ˗𝟏_t>>
 {
 protected:
         Double  r, i;
@@ -790,7 +804,7 @@ struct C͡o: Co
 #define Self C͡o
         , Arith_function	< Self	>
         , Complex_function	< Self	>
-        , Mul_div_binary	< Self, Co, double, 𝟏_t, ˗𝟏_t, 𝐢_t, ˗𝐢_t>
+        , Mul_div_binary	< Self, Types< Co, double, 𝟏_t, ˗𝟏_t, 𝐢_t, ˗𝐢_t>>
 {
 protected:
 CE      Self( double r, double i): Co( r, i) {}
