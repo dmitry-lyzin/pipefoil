@@ -145,20 +145,6 @@ template< class T> using Unsigned = typename make_unsigned< T>::type;
 
 template< class... > struct Types {}; // список типов
 
-template< class T, class Other = T>
-struct Mul_div_assign
-{
-        FRIEND  T&    OP *=( T& t, C Other& other) { return t = t * other; }
-        FRIEND  T&    OP /=( T& t, C Other& other) { return t = t / other; }
-};
-
-template< class T, class Other = T>
-struct Add_sub_assign
-{
-        FRIEND  T&   OP +=(  T& t, C Other& other) { return t = t + other; }
-        FRIEND  T&   OP -=(  T& t, C Other& other) { return t = t - other; }
-};
-
 // добавить операции сравнения с другим типом
 template< class T, class Other = T>
 struct Comparable
@@ -189,6 +175,30 @@ struct Comparable< T, T>
         FRIEND  bool OP > ( C T& t1, C T& t2) { return   t2 <  t1 ; }
 };
 
+template< class T>
+class Near: Comparable< Near<T>, T>
+{
+        C T&	ref;	// ссылка на "родителя"
+public:
+        EXPL	Near		( C T& t): ref( t) {}
+        CEC	bool	OP ==	( C T& t) C { return   ref.near		( t); }
+        CEC	bool	OP <	( C T& t) C { return ! ref.near_greater	( t); }
+        CEC	bool	OP >	( C T& t) C { return ! ref.near_less	( t); }
+};
+
+template< class T>
+struct Near_comparable
+{
+        FRIEND	Near< T> OP ~ ( C T& t) { return Near< T>(t); }
+};
+
+template< class T, class Other = T>
+struct Add_sub_assign
+{
+        FRIEND  T&   OP +=(  T& t, C Other& other) { return t = t + other; }
+        FRIEND  T&   OP -=(  T& t, C Other& other) { return t = t - other; }
+};
+
 template< class T, class Types>
 struct Add_sub_binary;
 
@@ -209,6 +219,13 @@ struct    Add_sub_binary< T, Types<>>
         , Comparable    < T>
 {
 //        FRIEND auto OP - (C T& t1, C T& t2) { return t1 + (-t2); }
+};
+
+template< class T, class Other = T>
+struct Mul_div_assign
+{
+        FRIEND  T&    OP *=( T& t, C Other& other) { return t = t * other; }
+        FRIEND  T&    OP /=( T& t, C Other& other) { return t = t / other; }
 };
 
 template< class T, class Types>
@@ -236,23 +253,6 @@ struct Arith_function
         FRIEND  auto    recip( C T& t) { return t.recip(); }
         FRIEND  auto    ⅟   ( C T& t) { return t.recip(); }
         FRIEND  auto    ²    ( C T& t) { return t.²    (); }
-};
-
-template< class T>
-class Near: Comparable< Near<T>, T>
-{
-        C T&	ref;	// ссылка на "родителя"
-public:
-        EXPL	Near		( C T& t): ref( t) {}
-        CEC	bool	OP ==	( C T& t) C { return   ref.near		( t); }
-        CEC	bool	OP <	( C T& t) C { return ! ref.near_greater	( t); }
-        CEC	bool	OP >	( C T& t) C { return ! ref.near_less	( t); }
-};
-
-template< class T>
-struct Near_comparable
-{
-        FRIEND	Near< T> OP ~ ( C T& t) { return Near< T>(t); }
 };
 
 #pragma endregion
