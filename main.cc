@@ -61,7 +61,7 @@ using std::cerr;
 #       ifdef __has_builtin
 #           if __has_builtin( __builtin_bit_cast)
 
-                template< typename Dest, typename Source>
+                template< class Dest, class Source>
                 typename enable_if
                 <          sizeof( Dest) == sizeof( Source)
                         && std::is_trivially_copyable< Dest  >::value
@@ -100,11 +100,11 @@ C class Ф{} ф; // МАМОЙ КЛЯНУСЬ (флаг для конструк�
 
 #define FN( f) constexpr friend auto f( const Self& r) -> decltype( r.f()) { return r.f(); }
 
-template< typename T>
+template< class T>
 AUTO lastbit = sizeof( T) * CHAR_BIT - 1;
 
-template< typename X
-        , typename = decltype( declval<X>().print( declval< ostream&>()) )
+template< class X
+        , class = decltype( declval<X>().print( declval< ostream&>()) )
         >
 ostream& operator <<( ostream& os, const X& x)
 {
@@ -112,8 +112,8 @@ ostream& operator <<( ostream& os, const X& x)
         return os;
 }
 
-#define TINT template< typename INT  , typename = typename enable_if< is_integral      < INT  >::value>::type> constexpr
-#define TFLT template< typename FLOAT, typename = typename enable_if< is_floating_point< FLOAT>::value>::type> constexpr
+#define TINT template< class INT  , class = typename enable_if< is_integral      < INT  >::value>::type> constexpr
+#define TFLT template< class FLOAT, class = typename enable_if< is_floating_point< FLOAT>::value>::type> constexpr
 
 namespace impl
 {
@@ -145,23 +145,22 @@ template< class T> using Unsigned = typename make_unsigned< T>::type;
 
 template< class... > struct Types {}; // список типов
 
-template< typename T, typename Other = T>
+template< class T, class Other = T>
 struct Mul_div_assign
 {
         FRIEND  T&    OP *=( T& t, C Other& other) { return t = t * other; }
         FRIEND  T&    OP /=( T& t, C Other& other) { return t = t / other; }
 };
 
-template< typename T, typename Other = T>
-struct Arith_assign: Mul_div_assign< T, Other>
+template< class T, class Other = T>
+struct Add_sub_assign
 {
-        FRIEND  T&   OP +=(  T& t, C Other& other) { return t = t +   other ; }
-        FRIEND  T&   OP -=(  T& t, C Other& other) { return t = t + (-other); }
-        FRIEND  auto OP - (C T& t, C Other& other) { return     t + (-other); }
+        FRIEND  T&   OP +=(  T& t, C Other& other) { return t = t + other; }
+        FRIEND  T&   OP -=(  T& t, C Other& other) { return t = t - other; }
 };
 
 // добавить операции сравнения с другим типом
-template< typename T, typename Other = T>
+template< class T, class Other = T>
 struct Comparable
 {
         FRIEND  bool OP !=( C T& t, C Other& other) { return !(t == other); }
@@ -180,7 +179,7 @@ struct Comparable
 };
 
 // добавить операции сравнения с самим собой
-template< typename T>
+template< class T>
 struct Comparable< T, T>
 {
         FRIEND	bool OP !=( C T& t1, C T& t2) { return !(t1 == t2); }
@@ -190,29 +189,27 @@ struct Comparable< T, T>
         FRIEND  bool OP > ( C T& t1, C T& t2) { return   t2 <  t1 ; }
 };
 
-
 template< class T, class Types>
-struct Arith_binary;
+struct Add_sub_binary;
 
 template< class T, class Other, class... Others>
-struct Arith_binary< T, Types< Other, Others...>>
-     : Arith_binary< T, Types<        Others...>>
-
-        , Arith_assign  < T, Other>
+struct    Add_sub_binary< T, Types< Other, Others...>>
+        : Add_sub_binary< T, Types<        Others...>>
+        , Add_sub_assign< T, Other>
         , Comparable    < T, Other>
 {
         FRIEND  auto OP + ( C Other& other, C T& t) { return   t  + other; }
         FRIEND  auto OP - ( C Other& other, C T& t) { return (-t) + other; }
-        FRIEND  auto OP * ( C Other& other, C T& t) { return   t  * other; }
-        //FRIEND  auto OP / ( C Other& other, C T& t) { return T( other) / t;}
-        FRIEND  auto OP / ( C Other& other, C T& t) { return (conj(t) * other) / abs²(t);}
+        //FRIEND  auto OP - ( C T& t, C Other& other) { return t + (-other); }
 };
 
 template< class T>
-struct Arith_binary< T, Types<>>
-        : Arith_assign  < T>
+struct    Add_sub_binary< T, Types<>>
+        : Add_sub_assign< T>
         , Comparable    < T>
-{};
+{
+//        FRIEND auto OP - (C T& t1, C T& t2) { return t1 + (-t2); }
+};
 
 template< class T, class Types>
 struct Mul_div_binary;
@@ -223,9 +220,7 @@ struct Mul_div_binary< T, Types< Other, Others...>>
 
         , Mul_div_assign< T, Other>
 {
-        FRIEND  auto OP * ( C Other& other, C T& t) { return t         * other; }
-        FRIEND  auto OP / ( C Other& other, C T& t) { return t.recip() * other; }
-        //FRIEND  auto OP / ( C Other& other, C T& t) { return (t.conj() * other) / t.abs²(); }
+        FRIEND  auto OP * ( C Other& other, C T& t) { return t * other; }
 };
 
 template< class T>
@@ -233,7 +228,7 @@ struct Mul_div_binary< T, Types<>>
         : Mul_div_assign< T>
 {};
 
-template< typename T>
+template< class T>
 struct Arith_function
 {
         FRIEND  auto    abs  ( C T& t) { return t.abs  (); }
@@ -243,7 +238,7 @@ struct Arith_function
         FRIEND  auto    ²    ( C T& t) { return t.²    (); }
 };
 
-template< typename T>
+template< class T>
 class Near: Comparable< Near<T>, T>
 {
         C T&	ref;	// ссылка на "родителя"
@@ -254,7 +249,7 @@ public:
         CEC	bool	OP >	( C T& t) C { return ! ref.near_less	( t); }
 };
 
-template< typename T>
+template< class T>
 struct Near_comparable
 {
         FRIEND	Near< T> OP ~ ( C T& t) { return Near< T>(t); }
@@ -263,7 +258,7 @@ struct Near_comparable
 #pragma endregion
 
 // constexpr'сный способ превращения T в signed T
-template< typename T>
+template< class T>
 CE auto sign_cast( T x) -> typename
 enable_if
 <       is_integral< T>::value && is_unsigned< T>::value
@@ -281,7 +276,7 @@ enable_if
 }
 
 // абсолютное значение, но с минусом, чтоб избежать глюка с abs( самое_большое_отрицательное)
-template< typename T>
+template< class T>
 CE auto nabs( T x) -> typename
 enable_if
 <       is_integral< T>::value && is_signed< T>::value
@@ -473,14 +468,16 @@ CEC	double	OP ""π  (        long double a) { return π * a;}
 CEC	double	OP ""π  ( unsigned long long a) { return π * a;}
 
 // Угол
-struct Angle    : Comparable	 < Angle>
-                , Near_comparable< Angle>
+struct Angle    :
+#define Self Angle
+                 Near_comparable< Self>
+                , Add_sub_binary< Self, Types<>>
+                , Mul_div_binary< Self, Types< double, int, unsigned>>
 {
-        #define Self Angle
         #pragma warning( push)
         #pragma warning( disable: 4146)
 
-        friend struct Turn; 
+        friend Turn; 
 
         using Val  = uint32_t;
 
@@ -511,7 +508,7 @@ TINT C  Self    OP * ( INT        r ) C { return val * r                        
 TINT C  Self    OP / ( INT        r ) C { return sign_cast( val) / r            ; }
 CEC     Self    OP / ( unsigned   r ) C { return            val  / r            ; }
 CEC     auto    OP / ( CSelf&     r ) C { return val / r.val                    ; }
-        void    print( ostream&   os) C { os << ( val * (180./semiturn)) << '°' ; }
+void    print( ostream&   os) C { os << ( val * (180./semiturn)) << '°' ; }
 
 FRIEND  Self    OP ""ᵒ( unsigned long long gradus);
 FRIEND  Self    OP ""ᵒ(        long double gradus);
@@ -542,8 +539,8 @@ CE void test_Angle()
 
         static_assert( is_same< decltype( a1 + a2 ), C Angle	>::value, "*");
         static_assert( is_same< decltype( a1 - a2 ), C Angle	>::value, "*");
-        //static_assert( is_same< decltype( 1  * a1 ), C Angle	>::value, "*");
-        //static_assert( is_same< decltype( 1. * a1 ), C Angle	>::value, "*");
+        static_assert( is_same< decltype( 1  * a1 ), C Angle	>::value, "*");
+        static_assert( is_same< decltype( 1. * a1 ), C Angle	>::value, "*");
         static_assert( is_same< decltype( a1 / 1  ), C Angle	>::value, "*");
         static_assert( is_same< decltype( a1 / 1. ), C Angle	>::value, "*");
         static_assert( is_same< decltype( a1 / a2 ), Angle::Val	>::value, "*");
@@ -602,10 +599,13 @@ CE void test_Angle()
 
 #pragma region // Turn{}
 // Оборот
-struct Turn
+struct Turn:
+#define Self Turn
+         Near_comparable< Self>
+        , Add_sub_binary< Self, Types< Angle>>
+        , Mul_div_binary< Self, Types< double, int, unsigned>>
 {
-        #define Self Turn
-        friend struct Angle; 
+        friend Angle;
 
         using Val  = Signed< Longer< Angle::Val>>;
 
@@ -620,6 +620,8 @@ TINT    Self            ( INT    x): val( x * one_turn) {}
 CEOP  C double          (         ) C { return double(val) / one_turn; }
 TINT OP C INT           (         ) C { return        val  / one_turn; }
 
+CEC     bool    OP ==   ( CSelf& r) C { return val == r.val	; }
+CEC     bool    OP <    ( CSelf& r) C { return val <  r.val	; }
 CEC     Self    OP -    (         ) C { return { ф,-val         }; }
 CEC     Self    OP +    ( CSelf& r) C { return { ф, val + r.val }; }
 CEC     Self    OP -    ( CSelf& r) C { return { ф, val - r.val }; }
@@ -627,7 +629,7 @@ CEC     Self    OP *    ( double r) C { return { ф, Val( val*r) }; }
 CEC     Self    OP /    ( double r) C { return Signed< Val>( double(val) / r ); }
 TINT C  Self    OP *    ( INT    r) C { return { ф, val * r     }; }
 TINT C  Self    OP /    ( INT    r) C { return { ф, val / r     }; }
-CEC     auto    OP /    ( CSelf& r) C { return      val / r.val  ; }
+CEC     auto    OP /    ( CSelf& r) C { return double(val)/r.val ; }
         void    print   ( ostream& os) C
         {
                 os << double( val) << " turn";
@@ -639,6 +641,7 @@ CEC Turn OP ""turn ( unsigned long long x) { return         x ; };
 CEC Turn OP ""turn ( long double        x) { return double( x); };
 AUTO     OP ""τ    ( unsigned long long x) { return OP ""turn ( x); };
 AUTO     OP ""τ    ( long double        x) { return OP ""turn ( x); };
+CEC Turn turn = 1turn;
 
 CE Angle::Angle( C Turn &x): val( x.val) {}
 
@@ -646,12 +649,16 @@ CE void test_Turn()
 {
 #pragma warning( push)
 #pragma warning( disable: 4146)
-        static_assert( Angle( Turn( 123ᵒ)) ==  123ᵒ, "***" );
-        static_assert( Angle(         2τ ) ==    0ᵒ, "***" );
-        static_assert( Angle(      1.25τ ) ==   90ᵒ, "***" );
-        static_assert( Angle(     -1.25τ ) ==  -90ᵒ, "***" );
-        static_assert( Angle(  0.1τ * 10 ) ==~   0ᵒ, "***" );
-        static_assert( int( Turn(180ᵒ-120ᵒ)*160) == 26, "***" );
+        static_assert( Angle( Turn( 123ᵒ)) ==  123ᵒ, "*" );
+        static_assert(        Turn( 123ᵒ)  ==  123ᵒ, "*" );
+        static_assert(    1.5turn - 270ᵒ   ==   270ᵒ, "*" );
+        static_assert( Angle(         2τ ) ==    0ᵒ, "*" );
+        static_assert( Angle(      1.25τ ) ==   90ᵒ, "*" );
+        static_assert( Angle(     -1.25τ ) ==  -90ᵒ, "*" );
+        static_assert( Angle(  10 * 0.1τ ) ==~   0ᵒ, "*" );
+        static_assert(              0.5τ   ==   180ᵒ, "*" );
+      //static_assert(          5 * 0.1τ   ==~  180ᵒ, "*" );
+        static_assert( int( Turn(180ᵒ-120ᵒ)*160) == 26, "*" );
 #pragma warning( pop)
 }
 #pragma endregion
@@ -663,8 +670,8 @@ struct ˗𝟏_t;	// комплексная минус единица
 struct  𝐢_t;	// мнимая единица
 struct ˗𝐢_t;	// мнимая минус единица
 
-template< typename Self>
-struct Complex_function
+template< class Self>
+struct Complex_function: Arith_function< Self>
 {
         // унарный минус
         FRIEND  Self    OP -( CSelf& z) { return {ф, -z.re(), -z.im() }; }
@@ -679,13 +686,32 @@ struct Complex_function
         }
 };
 
+template< class T, class Types>
+struct Complex_mul_div;
+
+template< class T, class Other, class... Others>
+struct    Complex_mul_div< T, Types< Other, Others...>>
+        : Complex_mul_div< T, Types<        Others...>>
+        , Mul_div_assign< T, Other>
+{
+        FRIEND  auto OP * ( C Other& other, C T& t) { return t         * other; }
+        FRIEND  auto OP / ( C Other& other, C T& t) { return t.recip() * other; }
+        //FRIEND  auto OP / ( C Other& other, C T& t) { return (t.conj() * other) / t.abs²(); }
+};
+
+template< class T>
+struct    Complex_mul_div< T, Types<>>
+        : Mul_div_assign< T, T>
+{};
+
+
 // Комплексное Число
 struct Co:
 #define Self Co
-          Arith_function	< Self	>
-        , Complex_function	< Self	>
+          Complex_function	< Self	>
         , Near_comparable	< Self	>
-        , Arith_binary		< Self, Types< double, 𝐢_t, ˗𝐢_t, 𝟏_t, ˗𝟏_t>>
+        , Add_sub_binary	< Self, Types< double, 𝐢_t, ˗𝐢_t, 𝟏_t, ˗𝟏_t>>
+        , Complex_mul_div	< Self, Types< double, 𝐢_t, ˗𝐢_t, 𝟏_t, ˗𝟏_t>>
 {
 protected:
         Double  r, i;
@@ -721,6 +747,7 @@ CEC     bool    OP ==( CSelf& z) C { return r  ==  z.r  && i  ==  z.i     ; }
 CEC	bool	near ( CSelf& z) C { return r.near(z.r) && i.near(z.i)    ; } // почти равный
 
 CEC     Self    OP + ( CSelf& z) C { return {r     + z.r  , i     + z.i  }; }
+CEC     Self    OP - ( CSelf& z) C { return {r     - z.r  , i     - z.i  }; }
 CEC     Self    OP * ( CSelf& z) C { return {r*z.r - i*z.i, i*z.r + r*z.i}; }
 CEC     Self    OP / ( CSelf& z) C { return (self * z.conj()) / z.abs²()  ; } // Деление КЧ на другое КЧ
 /*
@@ -737,20 +764,27 @@ CEC     Self    OP * ( CSelf& z) C
 */
 
 CEC     Self    OP + ( double s) C { return {r + s, i    }; }
+CEC     Self    OP - ( double s) C { return {r - s, i    }; }
 CEC     Self    OP * ( double s) C { return {r * s, i * s}; } // Умножение на скаляр
 CEC     Self    OP / ( double s) C { return {r / s, i / s}; } // Деление на скаляр
 
 CEC     Self    OP + ( C  𝐢_t& ) C { return {  r  , i + 1}; }
+CEC     Self    OP - ( C  𝐢_t& ) C { return {  r  , i - 1}; }
 CEC     Self    OP * ( C  𝐢_t& ) C { return { -i  , r    }; } // Умножение на мнимую
 CEC     Self    OP / ( C  𝐢_t& ) C { return {  i  ,-r    }; } // Деление на мнимую
+
 CEC     Self    OP + ( C ˗𝐢_t& ) C { return {  r  , i - 1}; }
+CEC     Self    OP - ( C ˗𝐢_t& ) C { return {  r  , i + 1}; }
 CEC     Self    OP * ( C ˗𝐢_t& ) C { return {  i  ,-r    }; } // Умножение на мнимую
 CEC     Self    OP / ( C ˗𝐢_t& ) C { return { -i  , r    }; } // Деление на мнимую
 
 CEC     Self    OP + ( C  𝟏_t& ) C { return  self + 1; }
+CEC     Self    OP - ( C  𝟏_t& ) C { return  self - 1; }
 CEC     Self    OP * ( C  𝟏_t& ) C { return  self    ; }
 CEC     Self    OP / ( C  𝟏_t& ) C { return  self    ; }
+
 CEC     Self    OP + ( C ˗𝟏_t& ) C { return  self - 1; }
+CEC     Self    OP - ( C ˗𝟏_t& ) C { return  self + 1; }
 CEC     Self    OP * ( C ˗𝟏_t& ) C { return -self    ; }
 CEC     Self    OP / ( C ˗𝟏_t& ) C { return -self    ; }
 
@@ -768,7 +802,7 @@ CEC     double  OP ^ ( CSelf& v) C { return  r*v.i - i*v.r; } // Псевдос�
                         last = self;
                 }
         };
-#undef Self
+        #undef Self
 };
 
 CE void test_Co()
@@ -802,9 +836,8 @@ CE void test_Co()
 // Единичное Комплексное Число (Unit Complex Number). C͡o = {𝑧 ∈ ℂ: |𝑧| = 1}
 struct C͡o: Co
 #define Self C͡o
-        , Arith_function	< Self	>
         , Complex_function	< Self	>
-        , Mul_div_binary	< Self, Types< Co, double, 𝟏_t, ˗𝟏_t, 𝐢_t, ˗𝐢_t>>
+        , Complex_mul_div	< Self, Types< Co, double, 𝟏_t, ˗𝟏_t, 𝐢_t, ˗𝐢_t>>
 {
 protected:
 CE      Self( double r, double i): Co( r, i) {}
@@ -937,11 +970,11 @@ CE void test_C͡o()
 }
 CE void test_Co_1()
 {
-        CE Co z = {3, 4};
-
-        static_assert( (5 + 𝐢)*(7 - 6𝐢)/(3+𝐢)		== (10 - 11𝐢)	, "*");
+        static_assert( (5 + 𝐢)*(7 - 6𝐢)/(3 + 𝐢)		== (10 - 11𝐢)	, "*");
         static_assert( (4 + 𝐢)*(5 + 3𝐢)+(3 + 𝐢)*(3 - 2𝐢)	== (28 + 14𝐢)	, "*");
 
+
+        CE Co z = {3, 4};
         static_assert( z + 𝐢 == Co( 3	, 5   )	, "*");
         static_assert( 𝐢 + z == Co( 3	, 5   )	, "*");
         static_assert( z - 𝐢 == Co( 3	, 3   )	, "*");
