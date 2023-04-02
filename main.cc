@@ -45,9 +45,13 @@ using std::cout;
 using std::cerr;
 #if __cplusplus >= 201411L
     using std::size;
+    using std::void_t;
 #else
     template< class T, std::size_t N>
     CE std::size_t size( const T (&array)[N] ) { return N; }
+
+    template< class... >
+    using void_t = void;
 #endif
 
 // ищем bit_cast
@@ -192,22 +196,17 @@ struct Near_comparable
         FRIEND	Near< T> OP ~ ( C T& t) { return Near< T>(t); }
 };
 
-template< class T, class Other = T>
-struct Add_sub_assign
-{
-        FRIEND  T&   OP +=(  T& t, C Other& other) { return t = t + other; }
-        FRIEND  T&   OP -=(  T& t, C Other& other) { return t = t - other; }
-};
-
 template< class T, class Types>
 struct Add_sub_binary;
 
 template< class T, class Other, class... Others>
 struct    Add_sub_binary< T, Types< Other, Others...>>
         : Add_sub_binary< T, Types<        Others...>>
-        , Add_sub_assign< T, Other>
         , Comparable    < T, Other>
 {
+        FRIEND  T&   OP +=(  T& t, C Other& other) { return t = t + other; }
+        FRIEND  T&   OP -=(  T& t, C Other& other) { return t = t - other; }
+
         FRIEND  auto OP + ( C Other& other, C T& t) { return   t  + other; }
         FRIEND  auto OP - ( C Other& other, C T& t) { return (-t) + other; }
         //FRIEND  auto OP - ( C T& t, C Other& other) { return t + (-other); }
@@ -215,10 +214,11 @@ struct    Add_sub_binary< T, Types< Other, Others...>>
 
 template< class T>
 struct    Add_sub_binary< T, Types<>>
-        : Add_sub_assign< T>
-        , Comparable    < T>
+        : Comparable    < T>
 {
-//        FRIEND auto OP - (C T& t1, C T& t2) { return t1 + (-t2); }
+        FRIEND  T&   OP +=(  T& t, C T& other) { return t = t + other; }
+        FRIEND  T&   OP -=(  T& t, C T& other) { return t = t - other; }
+        //        FRIEND auto OP - (C T& t1, C T& t2) { return t1 + (-t2); }
 };
 
 template< class T, class Other = T>
@@ -254,6 +254,36 @@ struct Arith_function
         FRIEND  auto    ⅟   ( C T& t) { return t.recip(); }
         FRIEND  auto    ²    ( C T& t) { return t.²    (); }
 };
+
+namespace impl
+{
+        template< class A, class B, class = void> CEC bool sumable = false;
+        template< class A, class B, class = void> CEC bool subable = false;
+        template< class A, class B, class = void> CEC bool mulable = false;
+        template< class A, class B, class = void> CEC bool divable = false;
+
+        template< class A, class B>
+        CEC bool sumable< A, B, void_t< decltype( declval<A>() + declval<B>())>> = true;
+
+        template< class A, class B>
+        CEC bool subable< A, B, void_t< decltype( declval<A>() - declval<B>())>> = true;
+
+        template< class A, class B>
+        CEC bool mulable< A, B, void_t< decltype( declval<A>() * declval<B>())>> = true;
+
+        template< class A, class B>
+        CEC bool divable< A, B, void_t< decltype( declval<A>() / declval<B>())>> = true;
+
+        template< class A>
+        struct Is_oper
+        {
+                template< class B> CEC bool OP +( C B& ) C { return sumable< A, B>; }
+                template< class B> CEC bool OP -( C B& ) C { return subable< A, B>; }
+                template< class B> CEC bool OP *( C B& ) C { return mulable< A, B>; }
+                template< class B> CEC bool OP /( C B& ) C { return divable< A, B>; }
+        };
+}
+template< class A> CEC impl::Is_oper< A> is_oper( C A& ) { return {}; }
 
 #pragma endregion
 
@@ -534,9 +564,6 @@ CE void test_Angle()
         AUTO a1 = 1.5ᵒ;
         AUTO a2 = 2.5ᵒ;
 
-        //AUTO a3 = a1 + 1.;
-        //AUTO a3 = a1 * a2;
-
         static_assert( is_same< decltype( a1 + a2 ), C Angle	>::value, "*");
         static_assert( is_same< decltype( a1 - a2 ), C Angle	>::value, "*");
         static_assert( is_same< decltype( 1  * a1 ), C Angle	>::value, "*");
@@ -545,53 +572,58 @@ CE void test_Angle()
         static_assert( is_same< decltype( a1 / 1. ), C Angle	>::value, "*");
         static_assert( is_same< decltype( a1 / a2 ), Angle::Val	>::value, "*");
 
-        static_assert( !(a1 >  a2)	, "*");
-        static_assert( !(a1 == a2)	, "*");
-        static_assert(   a1 <= a2	, "*");
+        static_assert(   (is_oper( a1) + a2)	,"*");
+        static_assert( ! (is_oper( a1) + 1.)	,"*");
+        static_assert( ! (is_oper( a1) * a2)	,"*");
+        static_assert(   (is_oper( a1) * 1.)	,"*");
+
+        static_assert( ! (a1 >  a2)		,"*");
+        static_assert( ! (a1 == a2)		,"*");
+        static_assert(    a1 <= a2		,"*");
 
         // проверка округлений в к-торе 
         {
-                static_assert( Angle(-π   ) ==  180ᵒ, "*" );
-                static_assert( Angle(-π/ 2) ==  270ᵒ, "*" );
-                static_assert( Angle(5π   ) ==  180ᵒ, "*" );
-                static_assert( Angle(5π/ 2) ==   90ᵒ, "*" );
-                static_assert( Angle(3π/ 2) ==  270ᵒ, "*" );
-                static_assert( Angle(3π/ 2) ==  -90ᵒ, "*" );
-                static_assert( Angle( π   ) ==  180ᵒ, "*" );
-                static_assert( Angle( π/ 2) ==   90ᵒ, "*" );
-                static_assert( Angle( π/ 3) ==   60ᵒ, "*" );
-                static_assert( Angle( π/ 4) ==   45ᵒ, "*" );
-                static_assert( Angle( π/ 5) ==   36ᵒ, "*" );
-                static_assert( Angle( π/ 6) ==   30ᵒ, "*" );
-                static_assert( Angle( π/ 8) == 22.5ᵒ, "*" );
-                static_assert( Angle( π/ 9) ==   20ᵒ, "*" );
-                static_assert( Angle( π/10) ==   18ᵒ, "*" );
-                static_assert( Angle( π/12) ==   15ᵒ, "*" );
-                static_assert( Angle( π/15) ==   12ᵒ, "*" );
-                static_assert( Angle( π/16) ==11.25ᵒ, "*" );
-                static_assert( Angle( π/18) ==   10ᵒ, "*" );
-                static_assert( Angle( π/20) ==    9ᵒ, "*" );
-                static_assert( Angle( π/24) ==  7.5ᵒ, "*" );
-                static_assert( Angle( π/25) ==  7.2ᵒ, "*" );
-                static_assert( Angle(π/180) ==    1ᵒ, "*" );
+                static_assert( Angle(-π   ) ==  180ᵒ	,"*");
+                static_assert( Angle(-π/ 2) ==  270ᵒ	,"*");
+                static_assert( Angle(5π   ) ==  180ᵒ	,"*");
+                static_assert( Angle(5π/ 2) ==   90ᵒ	,"*");
+                static_assert( Angle(3π/ 2) ==  270ᵒ	,"*");
+                static_assert( Angle(3π/ 2) ==  -90ᵒ	,"*");
+                static_assert( Angle( π   ) ==  180ᵒ	,"*");
+                static_assert( Angle( π/ 2) ==   90ᵒ	,"*");
+                static_assert( Angle( π/ 3) ==   60ᵒ	,"*");
+                static_assert( Angle( π/ 4) ==   45ᵒ	,"*");
+                static_assert( Angle( π/ 5) ==   36ᵒ	,"*");
+                static_assert( Angle( π/ 6) ==   30ᵒ	,"*");
+                static_assert( Angle( π/ 8) == 22.5ᵒ	,"*");
+                static_assert( Angle( π/ 9) ==   20ᵒ	,"*");
+                static_assert( Angle( π/10) ==   18ᵒ	,"*");
+                static_assert( Angle( π/12) ==   15ᵒ	,"*");
+                static_assert( Angle( π/15) ==   12ᵒ	,"*");
+                static_assert( Angle( π/16) ==11.25ᵒ	,"*");
+                static_assert( Angle( π/18) ==   10ᵒ	,"*");
+                static_assert( Angle( π/20) ==    9ᵒ	,"*");
+                static_assert( Angle( π/24) ==  7.5ᵒ	,"*");
+                static_assert( Angle( π/25) ==  7.2ᵒ	,"*");
+                static_assert( Angle(π/180) ==    1ᵒ	,"*");
         }
         // проверка округлений при * и / 
         {
-                static_assert(        -180ᵒ ==  180ᵒ,"*" );
-                static_assert(    1ᵒ - 359ᵒ ==    2ᵒ,"*" );
-                static_assert(  1.5ᵒ + 2.5ᵒ ==    4ᵒ,"*" );
-                static_assert(  1.5ᵒ *  10  ==   15ᵒ,"*" );
-                static_assert(  15ᵒ    == 1.5ᵒ * 10 ,"*" );
-                static_assert(  -10ᵒ *  -3  ==   30ᵒ,"*" );
-                static_assert(   30ᵒ /  -3  ==  -10ᵒ,"*" );
-                static_assert(   30ᵒ /  -3. ==  -10ᵒ,"*" );
-                static_assert(  -90ᵒ *  -3  ==  270ᵒ,"*" );
-                static_assert(    1ᵒ *  10  ==~  10ᵒ,"*" );
-                static_assert(   36ᵒ *  10  ==~   0ᵒ,"*" );
-                static_assert(  359ᵒ *  10  ==~ -10ᵒ,"*" );
-                static_assert(   90ᵒ /  10ᵒ ==    9 ,"*" );
-                static_assert(  -90ᵒ /  10ᵒ ==   27 ,"*" );
-                //static_assert( -90ᵒ  / -10ᵒ ==    9 ,"*" );
+                static_assert(        -180ᵒ ==  180ᵒ	,"*");
+                static_assert(    1ᵒ - 359ᵒ ==    2ᵒ	,"*");
+                static_assert(  1.5ᵒ + 2.5ᵒ ==    4ᵒ	,"*");
+                static_assert(  1.5ᵒ *  10  ==   15ᵒ	,"*");
+                static_assert(  15ᵒ    == 1.5ᵒ * 10	,"*");
+                static_assert(  -10ᵒ *  -3  ==   30ᵒ	,"*");
+                static_assert(   30ᵒ /  -3  ==  -10ᵒ	,"*");
+                static_assert(   30ᵒ /  -3. ==  -10ᵒ	,"*");
+                static_assert(  -90ᵒ *  -3  ==  270ᵒ	,"*");
+                static_assert(    1ᵒ *  10  ==~  10ᵒ	,"*");
+                static_assert(   36ᵒ *  10  ==~   0ᵒ	,"*");
+                static_assert(  359ᵒ *  10  ==~ -10ᵒ	,"*");
+                static_assert(   90ᵒ /  10ᵒ ==    9	,"*");
+                static_assert(  -90ᵒ /  10ᵒ ==   27	,"*");
+                //static_assert( -90ᵒ  / -10ᵒ ==    9 	,"*");
         }
         #pragma warning( pop)
 }
