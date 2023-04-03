@@ -17,12 +17,13 @@
 
 #define CE      constexpr
 #define CEC     constexpr const
-#define CEOP    constexpr operator
+#define OP      operator
+#define EXPLOP  constexpr explicit operator const
+#define CEOP    constexpr operator const
 #define EXPL    constexpr explicit
 #define FRIEND  constexpr friend const
 #define STATIC  constexpr static
 #define AUTO    constexpr auto
-#define OP      operator
 #define C       const
 #define CSelf   const Self
 #define self    (*this)
@@ -105,7 +106,7 @@ C class Ф{} ф; // МАМОЙ КЛЯНУСЬ (флаг для конструк�
 #define FN( f) constexpr friend auto f( const Self& r) -> decltype( r.f()) { return r.f(); }
 
 template< class T>
-AUTO lastbit = sizeof( T) * CHAR_BIT - 1;
+CEC size_t bitsizeof = sizeof( T) * CHAR_BIT;
 
 template< class X
         , class = decltype( declval<X>().print( declval< ostream&>()) )
@@ -316,7 +317,7 @@ enable_if
         using uT = Unsigned< T>;
         // x ⩾ 0 → mask = 0
         // x < 0 → mask = -1
-        const uT mask = x >> lastbit< T>;
+        const uT mask = x >> (bitsizeof< T> - 1);
         return mask - (uT(x) ^ mask);
 };
 
@@ -329,61 +330,61 @@ private:
         double	val;
 
 public:
-CE	Self		(         ): val(  ) {}
-CE	Self		( double x): val( x) {}
-//CE      Self		( CSelf &x): val( x.val) {}
-CEOP C	double		(         ) C { return  val;	}
-CEC	Self	OP -	(         ) C { return -val;	}
-CE	double* OP &	(         )   { return &val;	}
-CEC	double* OP &	(         ) C { return &val;	}
-//CEOP 	double&		(         )   { return  val;	}
-//CEOP 	C double&	(         ) C { return  val;	}
-CEC	bool    isfinite(         ) C { return raw_abs( val) < raw( infinity)	; }
-CEC	double  ²       (         ) C { return val * val			; }
-CEC	double	abs	(         ) C { return bit_cast< double>( raw_abs( val)); }
-CEC	int64_t	signbit	(         ) C { return raw(val) & (uint64_t(1) << 63)	; }
-                                        // val = (x >= 0. ? val : -val)
-CEC	double	copysign( double x) C { return x < 0. ? -abs() : abs()		; }
-//CEC	void	sgn	( double x)   { val = bit_cast< double>( raw(val) ^ raw(x) & (uint64_t(1) << 63)); }
+        CE	Self		(         ): val(  ) {}
+        CE	Self		( double x): val( x) {}
+        //CE	Self		( CSelf &x): val( x.val) {}
+        CEOP	double		(         ) C { return  val;	}
+        CEC	Self	OP -	(         ) C { return -val;	}
+        CE	double* OP &	(         )   { return &val;	}
+        CEC	double* OP &	(         ) C { return &val;	}
+        //CEOP 	double&		(         ) C { return  val;	}
+        CEC	bool    isfinite(         ) C { return raw_abs( val) < raw( infinity)	; }
+        CEC	double  ²       (         ) C { return val * val			; }
+        CEC	double	abs	(         ) C { return bit_cast< double>( raw_abs( val)); }
+        CEC	int64_t	signbit	(         ) C { return raw(val) & (uint64_t(1) << 63)	; }
+        // val = (x >= 0. ? val : -val)
+        CEC	double	copysign( double x) C { return x < 0. ? -abs() : abs()		; }
+        //CEC	void	sgn	( double x)   { val = bit_cast< double>( raw(val) ^ raw(x) & (uint64_t(1) << 63)); }
 
-CEC	double	root    (         ) C {
-                                              if( val < 0        ) return quiet_NaN;
-                                              if( not isfinite() ) return val;
-                                                                   return root_rec( val, val, 0.);
-                                      }
+        CEC	double	root    (         ) C
+        {
+                if( val < 0        ) return quiet_NaN;
+                if( not isfinite() ) return val;
+                return root_rec( val, val, 0.);
+        }
         FN( isfinite); FN( ²); FN( abs);
 
-CE      Self&   OP +=	( double r)   { val += r; return self; }
-CE      Self&   OP -=	( double r)   { val -= r; return self; }
-CE      Self&   OP *=	( double r)   { val *= r; return self; }
-CE      Self&   OP /=	( double r)   { val /= r; return self; }
+        CE      Self&   OP +=	( double r)   { val += r; return self; }
+        CE      Self&   OP -=	( double r)   { val -= r; return self; }
+        CE      Self&   OP *=	( double r)   { val *= r; return self; }
+        CE      Self&   OP /=	( double r)   { val /= r; return self; }
 
-static  CSelf   min             ; //   10000000000000
-static  CSelf   max             ; // 7FEFFFFFFFFFFFFF
-static  CSelf   lowest          ; // FFEFFFFFFFFFFFFF
-static  CSelf   epsilon         ; // 3CB0000000000000 2.220446049250313081e-16
-static  CSelf   round_error     ; // 3FE0000000000000 0.5
-static  CSelf   denorm_min      ; //                1
-static  CSelf   infinity        ; // 7FF0000000000000
-static  CSelf   quiet_NaN       ; // 7FF8000000000000
-static  CSelf   signaling_NaN   ; // 7FF8000000000001
+        static  CSelf   min             ; //   10000000000000
+        static  CSelf   max             ; // 7FEFFFFFFFFFFFFF
+        static  CSelf   lowest          ; // FFEFFFFFFFFFFFFF
+        static  CSelf   epsilon         ; // 3CB0000000000000 2.220446049250313081e-16
+        static  CSelf   round_error     ; // 3FE0000000000000 0.5
+        static  CSelf   denorm_min      ; //                1
+        static  CSelf   infinity        ; // 7FF0000000000000
+        static  CSelf   quiet_NaN       ; // 7FF8000000000000
+        static  CSelf   signaling_NaN   ; // 7FF8000000000001
 
-CEC	bool	near_less	( CSelf &x) C { return sraw(val) < sraw(x) + ε	;} // почти равный и меньше
-CEC	bool	near_greater	( CSelf &x) C { return sraw(val) > sraw(x) - ε	;} // почти равный и больше
-CEC	bool	near		( CSelf &x) C // почти равный
+        CEC	bool	near_less	( CSelf &x) C { return sraw(val) < sraw(x) + ε	;} // почти равный и меньше
+        CEC	bool	near_greater	( CSelf &x) C { return sraw(val) > sraw(x) - ε	;} // почти равный и больше
+        CEC	bool	near_0		(	  ) C { return raw_abs(val) < raw( min)	;}
+        CEC	bool	near		( CSelf &x) C // почти равный
         {
                 return	   nabs( int64_t( uint64_t(raw(val)) - uint64_t(raw(x)))) >= -ε
-                        || near_0(val) && near_0(x)
+                        || near_0() && x.near_0()
                         ;
         }
-        
+
 private:
-STATIC	int64_t	ε = 3;  // епсилон (в точках на числовой прямой)
-STATIC	int64_t	raw	( double x) { return bit_cast< int64_t>( x)			;}
-STATIC	int64_t	sraw	( double x) { return raw(x) ^ (uint64_t( raw(x) >> 63) >> 1)	;} // заполнить все 64 бита копиями знакового бита, и обнуляет старший бит
-STATIC	int64_t	raw_abs	( double x) { return raw(x) & ~(uint64_t(1) << 63)		;}
-STATIC	bool	near_0	( double x) { return raw_abs(x) < raw( min)			;}
-STATIC	double  root_rec( double r, double curr, double prev)
+        STATIC	int64_t	ε = 3;  // епсилон (в точках на числовой прямой)
+        STATIC	int64_t	raw	( double x) { return bit_cast< int64_t>( x)			;}
+        STATIC	int64_t	sraw	( double x) { return raw(x) ^ (uint64_t( raw(x) >> 63) >> 1)	;} // заполнить все 64 бита копиями знакового бита, и обнуляет старший бит
+        STATIC	int64_t	raw_abs	( double x) { return raw(x) & ~(uint64_t(1) << 63)		;}
+        STATIC	double  root_rec( double r, double curr, double prev)
         {
                 // sqrt Newton-Raphson
                 // https://gist.github.com/alexshtf/eb5128b3e3e143187794
@@ -508,40 +509,41 @@ struct Angle    :
         #pragma warning( disable: 4146)
 
         friend Turn; 
-
         using Val  = uint32_t;
 
 private:
         Val     val;
-STATIC  Val     semiturn = Val(1) << lastbit< Val>;
-STATIC  Signed< Val> ε = 8;
+        STATIC  Val     semiturn = Val(1) << (bitsizeof< Val> - 1);
+        STATIC  Signed< Val> ε = 8;
 
-TINT    Self         ( INT        v ): val( v) {}
+        TINT    Self         ( INT        v ): val( v) {}
 
 public:
-EXPL    Self         ( C Turn&      );
-EXPL    Self         ( double radian): val( Val(-1) & Signed< Longer< Val>>( radian * (semiturn/π)) ) {}
-EXPL OP C double     (              ) C { return val * (π/semiturn)		; }
-CEC     bool    OP ==( CSelf&     r ) C { return val == r.val			; }
-CEC     bool    OP < ( CSelf&     r ) C { return val <  r.val			; }
-CEC	bool	near ( CSelf&     r ) C { return nabs( sign_cast(val-r.val))>-ε	; } // почти равный
-CEC	bool	near_greater(CSelf&r) C { return       sign_cast(val-r.val) <-ε	; } // почти равный и больше
-CEC	bool	near_less   (CSelf&r) C { return       sign_cast(val-r.val) > ε	; } // почти равный и меньше
-CEC     Self    OP - (              ) C { return -val				; }
-CEC     Val*    OP & (              ) C { return &val				; }
+        EXPL    Self         ( C Turn&      );
+        EXPL    Self         ( double radian): val( Val(-1) & Signed< Longer< Val>>( radian * (semiturn/π)) ) {}
+        EXPLOP  double       (              ) C { return val * (π/semiturn)		; }
 
-CEC     Self    OP + ( CSelf&     r ) C { return val + r.val                    ; }
-CEC     Self    OP - ( CSelf&     r ) C { return val - r.val                    ; }
-CEC     Self    OP * ( double     r ) C { return Val( val * r )                 ; }
-CEC     Self    OP / ( double     r ) C { return Signed< Val>( val / r )        ; }
-TINT C  Self    OP * ( INT        r ) C { return val * r                        ; }
-TINT C  Self    OP / ( INT        r ) C { return sign_cast( val) / r            ; }
-CEC     Self    OP / ( unsigned   r ) C { return            val  / r            ; }
-CEC     auto    OP / ( CSelf&     r ) C { return val / r.val                    ; }
-void    print( ostream&   os) C { os << ( val * (180./semiturn)) << '°' ; }
+        CEC     bool    OP ==( CSelf&     r ) C { return val == r.val			; }
+        CEC     bool    OP < ( CSelf&     r ) C { return val <  r.val			; }
+        CEC	bool	near ( CSelf&     r ) C { return nabs( sign_cast(val-r.val))>-ε	; } // почти равный
+        CEC	bool	near_greater(CSelf&r) C { return       sign_cast(val-r.val) <-ε	; } // почти равный и больше
+        CEC	bool	near_less   (CSelf&r) C { return       sign_cast(val-r.val) > ε	; } // почти равный и меньше
 
-FRIEND  Self    OP ""ᵒ( unsigned long long gradus);
-FRIEND  Self    OP ""ᵒ(        long double gradus);
+        CEC     Self    OP - (              ) C { return -val				; }
+        CEC     Val*    OP & (              ) C { return &val				; }
+
+        CEC     Self    OP + ( CSelf&     r ) C { return val + r.val                    ; }
+        CEC     Self    OP - ( CSelf&     r ) C { return val - r.val                    ; }
+        CEC     Self    OP * ( double     r ) C { return Val( val * r )                 ; }
+        CEC     Self    OP / ( double     r ) C { return Signed< Val>( val / r )        ; }
+        TINT C  Self    OP * ( INT        r ) C { return val * r                        ; }
+        TINT C  Self    OP / ( INT        r ) C { return sign_cast( val) / r            ; }
+        CEC     Self    OP / ( unsigned   r ) C { return            val  / r            ; }
+        CEC     auto    OP / ( CSelf&     r ) C { return val / r.val                    ; }
+                void    print( ostream&   os) C { os << ( val * (180./semiturn)) << '°' ; }
+
+        FRIEND  Self    OP ""ᵒ( unsigned long long gradus);
+        FRIEND  Self    OP ""ᵒ(        long double gradus);
         #pragma warning( pop)
         #undef Self
 };
@@ -638,34 +640,34 @@ struct Turn:
         , Mul_div_binary< Self, Types< double, int, unsigned>>
 {
         friend Angle;
-
         using Val  = Signed< Longer< Angle::Val>>;
 
 private:
-STATIC  Val     one_turn = Val(1) << (lastbit< Unsigned< Angle::Val>> + 1);
+        STATIC  Val     one_turn = Val(1) << bitsizeof< Unsigned< Angle::Val>>;
         Val     val;
-CE      Self            ( Ф, Val v): val( v           ) {}
-public:
-CE      Self            ( Angle  x): val( x.val       ) {}
-CE      Self            ( double x): val( x * one_turn) {}
-TINT    Self            ( INT    x): val( x * one_turn) {}
-CEOP  C double          (         ) C { return double(val) / one_turn; }
-TINT OP C INT           (         ) C { return        val  / one_turn; }
 
-CEC     bool    OP ==   ( CSelf& r) C { return val == r.val	; }
-CEC     bool    OP <    ( CSelf& r) C { return val <  r.val	; }
-CEC     Self    OP -    (         ) C { return { ф,-val         }; }
-CEC     Self    OP +    ( CSelf& r) C { return { ф, val + r.val }; }
-CEC     Self    OP -    ( CSelf& r) C { return { ф, val - r.val }; }
-CEC     Self    OP *    ( double r) C { return { ф, Val( val*r) }; }
-CEC     Self    OP /    ( double r) C { return Signed< Val>( double(val) / r ); }
-TINT C  Self    OP *    ( INT    r) C { return { ф, val * r     }; }
-TINT C  Self    OP /    ( INT    r) C { return { ф, val / r     }; }
-CEC     auto    OP /    ( CSelf& r) C { return double(val)/r.val ; }
-        void    print   ( ostream& os) C
-        {
-                os << double( val) << " turn";
-        }
+        CE      Self            ( Ф, Val v): val( v           ) {}
+public:
+        CE      Self            ( Angle  x): val( x.val       ) {}
+        CE      Self            ( double x): val( x * one_turn) {}
+        TINT    Self            ( INT    x): val( x * one_turn) {}
+        CEOP    double          (         ) C { return double(val) / one_turn; }
+        TINT OP C INT           (         ) C { return        val  / one_turn; }
+
+        CEC     bool    OP ==   ( CSelf& r) C { return val == r.val	; }
+        CEC     bool    OP <    ( CSelf& r) C { return val <  r.val	; }
+        CEC     Self    OP -    (         ) C { return { ф,-val         }; }
+        CEC     Self    OP +    ( CSelf& r) C { return { ф, val + r.val }; }
+        CEC     Self    OP -    ( CSelf& r) C { return { ф, val - r.val }; }
+        CEC     Self    OP *    ( double r) C { return { ф, Val( val*r) }; }
+        CEC     Self    OP /    ( double r) C { return Signed< Val>( double(val) / r ); }
+        TINT C  Self    OP *    ( INT    r) C { return { ф, val * r     }; }
+        TINT C  Self    OP /    ( INT    r) C { return { ф, val / r     }; }
+        CEC     auto    OP /    ( CSelf& r) C { return double(val)/r.val ; }
+                void    print( ostream& os) C
+                {
+                        os << double( val) << " turn";
+                }
         #undef Self
 };
 
@@ -749,20 +751,20 @@ protected:
         Double  r, i;
 
 public:
-CE      Self( double r, double i): r( r ), i( i ) {}
-CE      Self( const Self& z     ): Self(z.r, z.i) {}
-CE      Self(Ф,double r,double i): Self(  r,   i) {} // для унификации с C͡o
-CE      Self( double s          ): Self(  s,   0) {}
+        CE      Self( double r, double i): r( r ), i( i ) {}
+        CE      Self( const Self& z     ): Self(z.r, z.i) {}
+        CE      Self(Ф,double r,double i): Self(  r,   i) {} // для унификации с C͡o
+        CE      Self( double s          ): Self(  s,   0) {}
 
-CEC     double  abs²	() C { return  r*r + i*i     ; } // абсолютная величина в квадрате
-CEC     double  abs	() C { return root( abs²())  ; } // абсолютная величина
-CEC     Self    conj	() C { return {  r, -i }     ; } // Сопряжённое (conjugate) число
-CEC     Self    recip	() C { return conj() / abs²(); } // 1/z - обратная величина (reciprocal, multiplicative inverse)
-CEC     double  re	() C { return r              ; } // действительная часть
-CEC     double  im	() C { return i              ; } // мнимая часть
-CEC     double  ℜ	() C { return r              ; } // действительная часть
-CEC     double  ℑ	() C { return i              ; } // мнимая часть
-CEC     Angle   arg	() C
+        CEC     double  abs²	() C { return  r*r + i*i     ; } // абсолютная величина в квадрате
+        CEC     double  abs	() C { return root( abs²())  ; } // абсолютная величина
+        CEC     Self    conj	() C { return {  r, -i }     ; } // Сопряжённое (conjugate) число
+        CEC     Self    recip	() C { return conj() / abs²(); } // 1/z - обратная величина (reciprocal, multiplicative inverse)
+        CEC     double  re	() C { return r              ; } // действительная часть
+        CEC     double  im	() C { return i              ; } // мнимая часть
+        CEC     double  ℜ	() C { return r              ; } // действительная часть
+        CEC     double  ℑ	() C { return i              ; } // мнимая часть
+        CEC     Angle   arg	() C
         {
                 if( r > +0. ) return Angle( atan( i / r ));
                 if( r < -0. ) return Angle( atan( i / r ) + π);
@@ -775,15 +777,15 @@ CEC     Angle   arg	() C
 
         FN( re); FN( im); FN( ℜ); FN( ℑ); FN( arg);
 
-CEC     bool    OP ==( CSelf& z) C { return r  ==  z.r  && i  ==  z.i     ; }
-CEC	bool	near ( CSelf& z) C { return r.near(z.r) && i.near(z.i)    ; } // почти равный
+        CEC     bool    OP ==( CSelf& z) C { return r  ==  z.r  && i  ==  z.i     ; }
+        CEC	bool	near ( CSelf& z) C { return r.near(z.r) && i.near(z.i)    ; } // почти равный
 
-CEC     Self    OP + ( CSelf& z) C { return {r     + z.r  , i     + z.i  }; }
-CEC     Self    OP - ( CSelf& z) C { return {r     - z.r  , i     - z.i  }; }
-CEC     Self    OP * ( CSelf& z) C { return {r*z.r - i*z.i, i*z.r + r*z.i}; }
-CEC     Self    OP / ( CSelf& z) C { return (self * z.conj()) / z.abs²()  ; } // Деление КЧ на другое КЧ
-/*
-CEC     Self    OP * ( CSelf& z) C
+        CEC     Self    OP + ( CSelf& z) C { return {r     + z.r  , i     + z.i  }; }
+        CEC     Self    OP - ( CSelf& z) C { return {r     - z.r  , i     - z.i  }; }
+        CEC     Self    OP * ( CSelf& z) C { return {r*z.r - i*z.i, i*z.r + r*z.i}; }
+        CEC     Self    OP / ( CSelf& z) C { return (self * z.conj()) / z.abs²()  ; } // Деление КЧ на другое КЧ
+        /*                                                                              
+        CEC     Self    OP * ( CSelf& z) C
         {
                 double a = (r + i) * (z.r + z.i);
                 double b = r * z.r;
@@ -793,47 +795,47 @@ CEC     Self    OP * ( CSelf& z) C
                         , a - b - c
                         };
         }
-*/
+        */
 
-CEC     Self    OP + ( double s) C { return {r + s, i    }; }
-CEC     Self    OP - ( double s) C { return {r - s, i    }; }
-CEC     Self    OP * ( double s) C { return {r * s, i * s}; } // Умножение на скаляр
-CEC     Self    OP / ( double s) C { return {r / s, i / s}; } // Деление на скаляр
+        CEC     Self    OP + ( double s) C { return {r + s, i    }; }
+        CEC     Self    OP - ( double s) C { return {r - s, i    }; }
+        CEC     Self    OP * ( double s) C { return {r * s, i * s}; } // Умножение на скаляр
+        CEC     Self    OP / ( double s) C { return {r / s, i / s}; } // Деление на скаляр
 
-CEC     Self    OP + ( C  𝐢_t& ) C { return {  r  , i + 1}; }
-CEC     Self    OP - ( C  𝐢_t& ) C { return {  r  , i - 1}; }
-CEC     Self    OP * ( C  𝐢_t& ) C { return { -i  , r    }; } // Умножение на мнимую
-CEC     Self    OP / ( C  𝐢_t& ) C { return {  i  ,-r    }; } // Деление на мнимую
+        CEC     Self    OP + ( C  𝐢_t& ) C { return {  r  , i + 1}; }
+        CEC     Self    OP - ( C  𝐢_t& ) C { return {  r  , i - 1}; }
+        CEC     Self    OP * ( C  𝐢_t& ) C { return { -i  , r    }; } // Умножение на мнимую
+        CEC     Self    OP / ( C  𝐢_t& ) C { return {  i  ,-r    }; } // Деление на мнимую
 
-CEC     Self    OP + ( C ˗𝐢_t& ) C { return {  r  , i - 1}; }
-CEC     Self    OP - ( C ˗𝐢_t& ) C { return {  r  , i + 1}; }
-CEC     Self    OP * ( C ˗𝐢_t& ) C { return {  i  ,-r    }; } // Умножение на мнимую
-CEC     Self    OP / ( C ˗𝐢_t& ) C { return { -i  , r    }; } // Деление на мнимую
+        CEC     Self    OP + ( C ˗𝐢_t& ) C { return {  r  , i - 1}; }
+        CEC     Self    OP - ( C ˗𝐢_t& ) C { return {  r  , i + 1}; }
+        CEC     Self    OP * ( C ˗𝐢_t& ) C { return {  i  ,-r    }; } // Умножение на мнимую
+        CEC     Self    OP / ( C ˗𝐢_t& ) C { return { -i  , r    }; } // Деление на мнимую
 
-CEC     Self    OP + ( C  𝟏_t& ) C { return  self + 1; }
-CEC     Self    OP - ( C  𝟏_t& ) C { return  self - 1; }
-CEC     Self    OP * ( C  𝟏_t& ) C { return  self    ; }
-CEC     Self    OP / ( C  𝟏_t& ) C { return  self    ; }
+        CEC     Self    OP + ( C  𝟏_t& ) C { return  self + 1; }
+        CEC     Self    OP - ( C  𝟏_t& ) C { return  self - 1; }
+        CEC     Self    OP * ( C  𝟏_t& ) C { return  self    ; }
+        CEC     Self    OP / ( C  𝟏_t& ) C { return  self    ; }
 
-CEC     Self    OP + ( C ˗𝟏_t& ) C { return  self - 1; }
-CEC     Self    OP - ( C ˗𝟏_t& ) C { return  self + 1; }
-CEC     Self    OP * ( C ˗𝟏_t& ) C { return -self    ; }
-CEC     Self    OP / ( C ˗𝟏_t& ) C { return -self    ; }
+        CEC     Self    OP + ( C ˗𝟏_t& ) C { return  self - 1; }
+        CEC     Self    OP - ( C ˗𝟏_t& ) C { return  self + 1; }
+        CEC     Self    OP * ( C ˗𝟏_t& ) C { return -self    ; }
+        CEC     Self    OP / ( C ˗𝟏_t& ) C { return -self    ; }
 
-// на время представим, что комплексные числа это векторы...
+        // на время представим, что комплексные числа это векторы...
         // Скалярное произведение (Inner product)
-CEC     double  OP , ( CSelf& v) C { return  r*v.r + i*v.i; }
-CEC     double  OP ^ ( CSelf& v) C { return  r*v.i - i*v.r; } // Псевдоскалярное, Векторное, косое произведение (Outer, cross product)
+        CEC     double  OP , ( CSelf& v) C { return  r*v.r + i*v.i; }
+        CEC     double  OP ^ ( CSelf& v) C { return  r*v.i - i*v.r; } // Псевдоскалярное, Векторное, косое произведение (Outer, cross product)
 
-        void    print( ostream& os) C
-        {
-                static Self last = { NAN, NAN };
-                if( self !=~ last )
+                void    print( ostream& os) C
                 {
-                        os << std::setw(8) << r << std::setw(12) << i << '\n';
-                        last = self;
-                }
-        };
+                        static Self last = { NAN, NAN };
+                        if( self !=~ last )
+                        {
+                                os << std::setw(8) << r << std::setw(12) << i << '\n';
+                                last = self;
+                        }
+                };
         #undef Self
 };
 
@@ -872,43 +874,44 @@ struct C͡o: Co
         , Complex_mul_div	< Self, Types< Co, double, 𝟏_t, ˗𝟏_t, 𝐢_t, ˗𝐢_t>>
 {
 protected:
-CE      Self( double r, double i): Co( r, i) {}
+        CE      Self( double r, double i): Co( r, i) {}
 
 public:
-CE      Self( Ф, C Co& z ): Co( z                                    ) { /*assert( z.abs²()  == 1.);*/ } // мамой клянусь - |z| = 1
-CE      Self( Ф, double r
-               , double i): Co( r, i                                 ) { /*assert( r*r + i*i == 1.);*/ } // мамой клянусь - |r + i𝑖| = 1
-EXPL    Self(    C Co& z ): Co( z / z.abs()                          ) {}
-CE      Self( double sin ): Co( ::root( 1. - sin*sin), sin           ) {}
-CE      Self( Angle    𝜑 ): Co( cos( double( 𝜑)), sin( double( 𝜑))  ) {} // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
+        CE      Self( Ф, C Co& z ): Co( z                                    ) { /*assert( z.abs²()  == 1.);*/ } // мамой клянусь - |z| = 1
+        CE      Self( Ф, double r
+                       , double i): Co( r, i                                 ) { /*assert( r*r + i*i == 1.);*/ } // мамой клянусь - |r + i𝑖| = 1
+        EXPL    Self(    C Co& z ): Co( z / z.abs()                          ) {}
+        CE      Self( double sin ): Co( ::root( 1. - sin*sin), sin           ) {}
+        CE      Self( Angle    𝜑 ): Co( cos( double( 𝜑)), sin( double( 𝜑))  ) {} // фазор угла 𝜑 (единичное КЧ с аргументом 𝜑)
 
-CEC     double  abs² () C { return     1.   ; } // абсолютная величина в квадрате = 1
-CEC     double  abs  () C { return     1.   ; } // абсолютная величина = 1, этож единичное число ;-)
-CEC     Self    conj () C { return { r, -i }; } // Сопряжённое (conjugate) число
-CEC     Self    recip() C { return { r, -i }; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
-//CEC     double  ψarg () C { double x1 = r + 1.; return i>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
-CEC     double  ψarg () C { return sgn( r+1., -i);} // псевдоугол (для сравнений)
+        CEC     double  abs² () C { return     1.   ; } // абсолютная величина в квадрате = 1
+        CEC     double  abs  () C { return     1.   ; } // абсолютная величина = 1, этож единичное число ;-)
+        CEC     Self    conj () C { return { r, -i }; } // Сопряжённое (conjugate) число
+        CEC     Self    recip() C { return { r, -i }; } // 1/z - обратная величина (reciprocal, multiplicative inverse)
+        //CEC     double  ψarg () C { double x1 = r + 1.; return i>=0 ? -x1 : x1;} // псевдоугол (для сравнений)
+        CEC     double  ψarg () C { return sgn( r+1., -i);} // псевдоугол (для сравнений)
+        
         FN( ψarg);
 
-CEC     bool    OP < ( CSelf& z) C { return ψarg() < z.ψarg()   ; }
-CEC     Self    OP * ( CSelf& z) C { return {ф, Co::OP *(z) }   ; } // ЕКЧ*ЕКЧ = ЕКЧ
-CEC     Self    OP / ( CSelf& z) C { return self * z.conj()     ; } // ЕКЧ/ЕКЧ = ЕКЧ, при этом деление вырождено
+        CEC     bool    OP < ( CSelf& z) C { return ψarg() < z.ψarg()   ; }
+        CEC     Self    OP * ( CSelf& z) C { return {ф, Co::OP *(z) }   ; } // ЕКЧ*ЕКЧ = ЕКЧ
+        CEC     Self    OP / ( CSelf& z) C { return self * z.conj()     ; } // ЕКЧ/ЕКЧ = ЕКЧ, при этом деление вырождено
 
-CEC     Co      OP * ( C Co&  z) C { return Co::OP *(z); } // ЕКЧ*КЧ = КЧ
-CEC     Co      OP / ( C Co&  z) C { return Co::OP /(z); } // ЕКЧ/КЧ = КЧ
-CEC     Co      OP * ( double x) C { return Co::OP *(x); } // ЕКЧ* Ч = КЧ
-CEC     Co      OP / ( double x) C { return Co::OP /(x); } // ЕКЧ/ Ч = КЧ
+        CEC     Co      OP * ( C Co&  z) C { return Co::OP *(z); } // ЕКЧ*КЧ = КЧ
+        CEC     Co      OP / ( C Co&  z) C { return Co::OP /(z); } // ЕКЧ/КЧ = КЧ
+        CEC     Co      OP * ( double x) C { return Co::OP *(x); } // ЕКЧ* Ч = КЧ
+        CEC     Co      OP / ( double x) C { return Co::OP /(x); } // ЕКЧ/ Ч = КЧ
 
-CEC     Self    OP * ( C  𝟏_t& ) C { return  self; }
-CEC     Self    OP / ( C  𝟏_t& ) C { return  self; }
-CEC     Self    OP * ( C ˗𝟏_t& ) C { return -self; }
-CEC     Self    OP / ( C ˗𝟏_t& ) C { return -self; }
+        CEC     Self    OP * ( C  𝟏_t& ) C { return  self; }
+        CEC     Self    OP / ( C  𝟏_t& ) C { return  self; }
+        CEC     Self    OP * ( C ˗𝟏_t& ) C { return -self; }
+        CEC     Self    OP / ( C ˗𝟏_t& ) C { return -self; }
 
-CEC     Self    OP * ( C  𝐢_t& ) C { return {-i, r}; }
-CEC     Self    OP / ( C  𝐢_t& ) C { return { i,-r}; }
-CEC     Self    OP * ( C ˗𝐢_t& ) C { return { i,-r}; }
-CEC     Self    OP / ( C ˗𝐢_t& ) C { return {-i, r}; }
-#undef Self
+        CEC     Self    OP * ( C  𝐢_t& ) C { return {-i, r}; }
+        CEC     Self    OP / ( C  𝐢_t& ) C { return { i,-r}; }
+        CEC     Self    OP * ( C ˗𝐢_t& ) C { return { i,-r}; }
+        CEC     Self    OP / ( C ˗𝐢_t& ) C { return {-i, r}; }
+        #undef Self
 };
 
 struct  𝟏_t: C͡o {	CE  𝟏_t	(): C͡o(  1.,  0.) {};  CEC ˗𝟏_t	OP - () C;   }; // комплексная единица
@@ -1214,7 +1217,7 @@ CE      ℂ tangent_point( C ℂ& p̅ ) C
         {
                 Angle Δα = α2 - α1; // угол поворота
                 // кол. сегментов, на круг - 160 сегментов, примерно
-                unsigned segments = Turn( Δα * 160);
+                unsigned segments = Turn( Δα) * 160;
                 ℂ₁ m̂( Δα / segments);   // ед. век. повернутый на угол Δα/segments
 
                 ℂ  r̅ = abs( R) * ℂ₁( α1);    // радиус от центра окружности
